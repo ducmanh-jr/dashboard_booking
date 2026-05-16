@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "check": "pnpm -r run check",
+    "build:web": "pnpm --filter web run build:admin && pnpm --filter web run build:partner && pnpm --filter web run build:customer",
+    "migrate": "pnpm --filter backend run migrate",
+    "db:reset:38": "powershell -ExecutionPolicy Bypass -File database/import-3.8.ps1",
+    "db:reset:latest": "pnpm --filter backend run bootstrap -- --force"
+  }
+}

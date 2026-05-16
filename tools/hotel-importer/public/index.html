@@ -1,0 +1,866 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hotel Importer</title>
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --text: #17202a;
+        --muted: #657282;
+        --line: #d9dee5;
+        --accent: #0f766e;
+        --accent-strong: #0b5f59;
+        --ok: #15803d;
+        --bad: #b91c1c;
+        --save: #1d4ed8;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: var(--bg); color: var(--text); }
+      header { border-bottom: 1px solid var(--line); background: var(--panel); }
+      .wrap { width: min(1760px, calc(100vw - 32px)); margin: 0 auto; }
+      .topbar { height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+      h1 { margin: 0; font-size: 22px; }
+      main { padding: 24px 0 40px; }
+      .grid { display: grid; grid-template-columns: minmax(520px, 0.9fr) minmax(640px, 1.1fr); gap: 18px; }
+      .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+      .panel h2 { margin: 0 0 12px; font-size: 16px; }
+      .tabs { display: none; }
+      .tabBtn { min-height: 54px; text-align: left; padding: 8px 12px; background: #fff; }
+      .tabBtn strong { display: block; font-size: 13px; }
+      .tabBtn span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; font-weight: 400; }
+      .tabBtn.active { border-color: var(--accent); background: #eefcf9; color: var(--accent-strong); }
+      .tabPanel { display: block; margin-bottom: 18px; }
+      .tabPanel.active { display: block; }
+      .stepHero { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 14px; }
+      .stepHero h2 { margin-bottom: 6px; }
+      .stepNo { color: var(--accent-strong); font-weight: 700; font-size: 13px; }
+      .sectionGrid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 18px; }
+      details.advanced { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfd; padding: 10px 12px; }
+      details.advanced summary { cursor: pointer; font-weight: 700; }
+      textarea {
+        width: 100%; min-height: 96px; resize: vertical; padding: 12px;
+        border: 1px solid var(--line); border-radius: 6px;
+        font: 13px/1.45 Consolas, "Courier New", monospace; color: var(--text);
+      }
+      .hint { margin-top: 8px; font-size: 13px; color: var(--muted); }
+      .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+      .searchBox {
+        margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 12px;
+        background: #fbfcfd; display: grid; gap: 10px;
+      }
+      .searchBox[hidden] { display: none; }
+      .searchRow { display: grid; grid-template-columns: minmax(0, 1fr) 150px auto; gap: 8px; align-items: end; }
+      .searchResults { display: grid; gap: 8px; }
+      .searchResult {
+        display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+        border: 1px solid var(--line); border-radius: 6px; padding: 9px; background: #fff;
+      }
+      .searchResult img { width: 58px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: #eef1f5; }
+      .searchResult strong { display: block; font-size: 13px; overflow-wrap: anywhere; }
+      .searchResult span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+      button {
+        border: 1px solid var(--line); background: #fff; color: var(--text);
+        border-radius: 6px; min-height: 38px; padding: 0 14px; font-weight: 600; cursor: pointer;
+      }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      button.primary:hover { background: var(--accent-strong); }
+      button.save { background: var(--save); border-color: var(--save); color: #fff; }
+      button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+      button:disabled { opacity: 0.55; cursor: wait; }
+      .stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+      .stage { border: 1px solid var(--line); border-radius: 6px; padding: 9px; font-size: 12px; color: var(--muted); min-height: 48px; background: #fbfcfd; }
+      .stage.active { border-color: var(--accent); color: var(--accent-strong); background: #eefcf9; }
+      .stage.done { color: var(--ok); background: #f0fdf4; border-color: #bbf7d0; }
+      .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+      .stat { border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: #fbfcfd; }
+      .stat strong { display: block; font-size: 20px; }
+      .stat span { color: var(--muted); font-size: 12px; }
+      .log, .sql {
+        width: 100%; min-height: 180px; overflow: auto; white-space: pre-wrap;
+        border: 1px solid var(--line); border-radius: 6px; background: #0f172a; color: #dbeafe;
+        padding: 12px; font: 12px/1.45 Consolas, "Courier New", monospace;
+      }
+      .sql { min-height: 300px; margin-top: 12px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+      th, td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; vertical-align: top; }
+      td { overflow-wrap: anywhere; }
+      th { color: var(--muted); font-weight: 600; }
+      .badge { display: inline-flex; align-items: center; min-height: 24px; border-radius: 999px; padding: 0 9px; font-size: 12px; font-weight: 700; }
+      .pass { color: var(--ok); background: #dcfce7; }
+      .invalid { color: var(--bad); background: #fee2e2; }
+      .files { margin-top: 12px; display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+      .savebox { margin-top: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: #fbfcfd; }
+      .applySummary { margin-top: 10px; border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: #f8fafc; font-size: 13px; }
+      .applySummary strong { font-size: 18px; color: var(--accent-strong); }
+      .queueBox { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: #fff; }
+      .queueHead { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 8px; }
+      .queueHead strong { font-size: 14px; }
+      .bulkRow { display: grid; grid-template-columns: minmax(0, 1fr) 92px auto; gap: 8px; align-items: end; margin-top: 10px; }
+      .batchRow { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 8px; align-items: end; margin-top: 10px; }
+      .queueTools { display: flex; justify-content: flex-end; margin-top: 8px; }
+      .queueTools button { min-height: 32px; padding: 0 10px; font-size: 12px; color: var(--muted); background: #fbfcfd; }
+      .reviewToolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+      .reviewToolbar input, .reviewToolbar select { width: auto; min-width: 150px; }
+      .hotelCards { display: grid; gap: 14px; }
+      .hotelCard { border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: #fbfcfd; }
+      .hotelCard h3 { margin: 0 0 12px; font-size: 16px; }
+      .hotelPreview { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 14px; align-items: start; margin-bottom: 14px; }
+      .hotelPreview img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: #eef1f5; }
+      .imageBox { position: relative; }
+      .imageNav {
+        position: absolute; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 6px;
+        background: rgba(15, 23, 42, 0.78); color: #fff; border-radius: 6px; padding: 5px;
+      }
+      .imageNav button { min-height: 28px; width: 28px; padding: 0; border-color: transparent; background: #fff; color: var(--text); }
+      .imageCount { min-width: 42px; text-align: center; font-size: 12px; font-weight: 700; }
+      .hotelPreviewText { min-width: 0; }
+      .formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .field.full { grid-column: 1 / -1; }
+      label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; font-weight: 700; }
+      input, select, .hotelCard textarea {
+        width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px;
+        font: 13px/1.35 Arial, Helvetica, sans-serif; color: var(--text); background: #fff;
+      }
+      .hotelCard textarea { min-height: 78px; resize: vertical; }
+      .fieldGroupTitle { grid-column: 1 / -1; margin: 4px 0 -4px; font-size: 13px; color: var(--accent-strong); font-weight: 700; }
+      @media (max-width: 920px) {
+        .tabs { grid-template-columns: 1fr; }
+        .grid { grid-template-columns: 1fr; }
+        .sectionGrid { grid-template-columns: 1fr; }
+        .stepHero { display: block; }
+        .stages, .stats { grid-template-columns: 1fr 1fr; }
+        .formGrid { grid-template-columns: 1fr; }
+        .hotelPreview { grid-template-columns: 1fr; }
+        .searchRow, .searchResult, .bulkRow, .batchRow { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap topbar">
+        <h1>Hotel Importer</h1>
+      </div>
+    </header>
+    <main class="wrap">
+      <div class="grid">
+        <section class="panel">
+          <h2>Nhap Agoda URLs</h2>
+          <textarea id="urls" spellcheck="false" placeholder="Moi dong mot link Agoda. Co the them: url,ten khach san,thanh pho,country_code"></textarea>
+          <div class="hint">Tool kiem tra link, tai du lieu that neu co, roi tu dien phan thieu de tao SQL preview.</div>
+          <label for="partnerSelect">Partner de gan khach san khi luu</label>
+          <select id="partnerSelect"></select>
+          <div class="hint">Moi lan bam Luu du lieu phai chon partner that. Khach san se luu o trang thai chua duyet.</div>
+          <div class="actions">
+            <button id="checkBtn">Kiem tra pass</button>
+            <button id="runBtn" class="primary">Bat dau tai du lieu</button>
+            <button id="saveBtn" class="save" disabled>Luu du lieu</button>
+            <button id="applyDataSqlBtn" type="button">Nap vao DB/data.sql</button>
+            <button id="showSearchBtn" type="button" hidden>Tim link khac</button>
+          </div>
+          <div class="searchBox" id="searchBox">
+            <label for="agodaSearch">Tim link Agoda moi</label>
+            <div class="searchRow">
+              <input id="agodaSearch" type="text" placeholder="Nhap ten khach san, vi du: Signature by M Village Tho Nhuom" />
+              <input id="agodaCity" type="text" value="Hanoi" placeholder="Thanh pho" />
+              <button id="searchAgodaBtn" type="button">Tim Agoda</button>
+            </div>
+            <div class="hint" id="searchHint">Bam Chon de thay link hien tai, hoac Cong them neu muon nhap nhieu khach san.</div>
+            <div id="searchResults" class="searchResults"></div>
+          </div>
+          <div class="hint">Nut Luu du lieu chi ghi cac khach san Ready vao `output/saved/apply.sql`; Needs review se bi bo qua.</div>
+          <div class="applySummary" id="applySummary">Da luu vao apply.sql: <strong>0</strong> khach san.</div>
+          <div class="queueBox">
+            <div class="queueHead">
+              <strong>Hang doi batch</strong>
+            </div>
+            <div class="hint">Dung cho 100-500 khach san: them link vao hang doi, chay batch, sau do review va luu SQL.</div>
+            <div class="bulkRow">
+              <input id="bulkCity" type="text" value="Hanoi" placeholder="Thanh pho, vi du Hanoi" />
+              <input id="bulkLimit" type="number" value="300" min="1" max="500" />
+              <button id="bulkDiscoverBtn" type="button">Tim hang loat</button>
+            </div>
+            <div class="batchRow">
+              <input id="batchLimit" type="number" value="25" min="1" max="100" />
+              <button id="queueRunBtn" type="button" class="primary">Chay batch</button>
+            </div>
+            <div class="queueTools">
+              <button id="queueClearBtn" type="button">Xoa hang doi</button>
+            </div>
+            <div class="hint" id="bulkHint">Tim hang loat se tu gom Agoda hotel id va them vao hang doi, khong xoa o URL hien tai.</div>
+            <div id="queueTable" class="hint">Dang tai hang doi...</div>
+          </div>
+          <div id="checkTable"></div>
+        </section>
+        <section class="panel">
+          <h2>Tien trinh</h2>
+          <div class="stages" id="stages"></div>
+          <div class="stats">
+            <div class="stat"><strong id="total">0</strong><span>Total</span></div>
+            <div class="stat"><strong id="ready">0</strong><span>Ready</span></div>
+            <div class="stat"><strong id="review">0</strong><span>Needs review</span></div>
+            <div class="stat"><strong id="failed">0</strong><span>Failed</span></div>
+          </div>
+          <div id="log" class="log">Chua chay.</div>
+          <div class="files" id="files"></div>
+          <div class="savebox" id="saveBox">Chua luu du lieu nao.</div>
+        </section>
+      </div>
+      <section class="panel" style="margin-top:18px">
+        <h2>Thong tin khach san de sua truoc khi luu</h2>
+        <div class="hint">Sua cac truong can chinh, sau do bam Luu du lieu. Tool se sinh lai SQL theo thong tin da sua.</div>
+        <div id="hotelCards" class="hotelCards" style="margin-top:12px">
+          Chua co du lieu. Hay bam Bat dau tai du lieu truoc.
+        </div>
+      </section>
+      <section class="panel" style="margin-top:18px">
+        <h2>SQL preview</h2>
+        <div id="sql" class="sql">SQL se xuat hien sau khi hoan thanh.</div>
+      </section>
+    </main>
+    <script>
+      const stages = [
+        "Kiem tra URL pass",
+        "Tai du lieu that",
+        "Tao du lieu fake phan thieu",
+        "Sinh SQL/report",
+        "Hoan thanh",
+      ];
+      const sample = "https://www.agoda.com/vi-vn/signature-by-m-village-th-nhu-m/hotel/hanoi-vn.html,Signature by M Village Tho Nhuom,Hanoi,VN";
+      const urls = document.querySelector("#urls");
+      const checkBtn = document.querySelector("#checkBtn");
+      const runBtn = document.querySelector("#runBtn");
+      const saveBtn = document.querySelector("#saveBtn");
+      const applyDataSqlBtn = document.querySelector("#applyDataSqlBtn");
+      const log = document.querySelector("#log");
+      const sql = document.querySelector("#sql");
+      const files = document.querySelector("#files");
+      const saveBox = document.querySelector("#saveBox");
+      const partnerSelect = document.querySelector("#partnerSelect");
+      const applySummary = document.querySelector("#applySummary");
+      const checkTable = document.querySelector("#checkTable");
+      const hotelCards = document.querySelector("#hotelCards");
+      const agodaSearch = document.querySelector("#agodaSearch");
+      const agodaCity = document.querySelector("#agodaCity");
+      const searchAgodaBtn = document.querySelector("#searchAgodaBtn");
+      const showSearchBtn = document.querySelector("#showSearchBtn");
+      const searchBox = document.querySelector("#searchBox");
+      const searchHint = document.querySelector("#searchHint");
+      const searchResults = document.querySelector("#searchResults");
+      const queueRunBtn = document.querySelector("#queueRunBtn");
+      const queueClearBtn = document.querySelector("#queueClearBtn");
+      const queueTable = document.querySelector("#queueTable");
+      const bulkCity = document.querySelector("#bulkCity");
+      const bulkLimit = document.querySelector("#bulkLimit");
+      const bulkDiscoverBtn = document.querySelector("#bulkDiscoverBtn");
+      const bulkHint = document.querySelector("#bulkHint");
+      const batchLimit = document.querySelector("#batchLimit");
+      let lastReport = null;
+
+      function selectTab(name) {
+        document.querySelectorAll(".tabBtn").forEach((button) => {
+          button.classList.toggle("active", button.dataset.tab === name);
+        });
+        document.querySelectorAll(".tabPanel").forEach((panel) => {
+          panel.classList.toggle("active", panel.id === `tab-${name}`);
+        });
+      }
+
+      document.querySelectorAll(".tabBtn").forEach((button) => {
+        button.addEventListener("click", () => selectTab(button.dataset.tab));
+      });
+
+      function renderStages(active = -1, doneTo = -1) {
+        document.querySelector("#stages").innerHTML = stages.map((stage, index) => {
+          const klass = index <= doneTo ? "stage done" : index === active ? "stage active" : "stage";
+          return `<div class="${klass}">${index + 1}. ${stage}</div>`;
+        }).join("");
+      }
+
+      function setStats(totals = {}) {
+        document.querySelector("#total").textContent = totals.total ?? 0;
+        document.querySelector("#ready").textContent = totals.ready ?? 0;
+        document.querySelector("#review").textContent = totals.needs_review ?? 0;
+        document.querySelector("#failed").textContent = totals.failed ?? 0;
+      }
+
+      function renderCheck(rows = []) {
+        if (!rows.length) {
+          checkTable.innerHTML = "";
+          return;
+        }
+        checkTable.innerHTML = `<table>
+          <thead><tr><th>#</th><th>URL</th><th>Trang thai</th></tr></thead>
+          <tbody>${rows.map((row) => `<tr>
+            <td>${row.row}</td>
+            <td>${row.url}</td>
+            <td><span class="badge ${row.status}">${row.status}</span>${row.reason ? `<div class="hint">${row.reason}</div>` : ""}</td>
+          </tr>`).join("")}</tbody>
+        </table>`;
+      }
+
+      async function loadQueue() {
+        try {
+          const res = await fetch("/api/queue");
+          const data = await res.json();
+          renderQueue(data.queue?.items || []);
+          renderSavedSummary(data.savedSummary);
+        } catch (error) {
+          queueTable.textContent = `Khong tai duoc hang doi: ${error.message}`;
+        }
+      }
+
+      function renderSavedSummary(summary = {}) {
+        const count = Number(summary.savedHotels || 0);
+        const lastSaved = summary.lastSavedAt ? `<div class="hint">Lan luu gan nhat: ${escapeHtml(summary.lastSavedAt)}</div>` : "";
+        applyDataSqlBtn.disabled = count <= 0;
+        applySummary.innerHTML = `
+          Da luu vao apply.sql: <strong>${count}</strong> khach san.
+          <div class="hint">File: ${escapeHtml(summary.applySqlPath || "output/saved/apply.sql")}</div>
+          ${lastSaved}
+        `;
+      }
+
+      async function loadPartners() {
+        try {
+          const data = await fetch("/api/partners").then((res) => res.json());
+          const partners = data.partners || [];
+          partnerSelect.innerHTML = partners.map((partner) => `
+            <option value="${partner.id}">Partner ${partner.id} - ${escapeHtml(partner.name)} (${escapeHtml(partner.email)})</option>
+          `).join("");
+        } catch {
+          partnerSelect.innerHTML = `<option value="">Khong tai duoc partner</option>`;
+        }
+      }
+
+      function renderQueue(items = []) {
+        if (!items.length) {
+          queueTable.textContent = "Hang doi dang trong.";
+          return;
+        }
+        const counts = items.reduce((acc, item) => {
+          const status = item.status || "pending";
+          acc[status] = (acc[status] || 0) + 1;
+          return acc;
+        }, {});
+        queueTable.innerHTML = `
+          <div class="hint">
+            Tong queue: ${items.length} |
+            Pending: ${counts.pending || 0} |
+            Needs review: ${counts.needs_review || 0} |
+            Ready: ${counts.ready_for_review || 0} |
+            Failed: ${counts.failed || 0}
+          </div>
+        `;
+      }
+
+      const fieldGroups = [
+        { title: "Thong tin co ban", fields: [
+          ["hotel_name", "Ten khach san", "text"],
+          ["city", "Thanh pho", "text"],
+          ["country_code", "Country code", "text"],
+          ["address", "Dia chi", "textarea"],
+          ["district", "Quan/Huyen", "text"],
+          ["description", "Mo ta", "textarea"],
+        ] },
+        { title: "Vi tri va danh gia", fields: [
+          ["latitude", "Latitude", "text"],
+          ["longitude", "Longitude", "text"],
+          ["star_rating", "Hang sao", "number"],
+          ["avg_rating", "Diem danh gia", "text"],
+          ["total_reviews", "So review", "number"],
+        ] },
+        { title: "Gia va phong", fields: [
+          ["price_per_night", "Gia moi dem", "number"],
+          ["room_label", "Ten hang phong", "text"],
+          ["room_area_sqm", "Dien tich phong m2", "number"],
+          ["room_capacity", "Suc chua phong", "number"],
+          ["bed_info", "Giuong", "text"],
+          ["total_inventory", "So phong", "number"],
+          ["room_options", "Nhieu hang phong label:gia:m2:suc chua:giuong:so phong:anh1;anh2, ngan cach bang |", "textarea"],
+        ] },
+        { title: "Tien ich va chinh sach", fields: [
+          ["amenities", "Tien ich, ngan cach bang |", "textarea"],
+          ["highlights", "Diem noi bat, ngan cach bang |", "textarea"],
+          ["transport_connections", "Ket noi di chuyen, ngan cach bang |", "textarea"],
+          ["check_in_time", "Check-in", "text"],
+          ["check_out_time", "Check-out", "text"],
+          ["cancellation_type", "Loai huy", "text"],
+          ["free_cancel_hours", "Gio huy mien phi", "number"],
+          ["children_free_age", "Tuoi tre em mien phi", "number"],
+          ["cancellation_policy_text", "Noi dung chinh sach huy", "textarea"],
+        ] },
+        { title: "Anh va dia diem gan day", fields: [
+          ["gallery_images", "Anh gallery category:url, ngan cach bang |", "textarea"],
+          ["nearby_places", "Dia diem gan day, nen co 15 dong: 5 tien ich, 5 du lich, 5 an uong/cafe", "textarea"],
+        ] },
+      ];
+
+      function renderHotelCards(report) {
+        const records = report?.records || [];
+        if (!records.length) {
+          hotelCards.textContent = "Chua co du lieu. Hay bam Bat dau tai du lieu truoc.";
+          return;
+        }
+        hotelCards.innerHTML = records.map((record, index) => {
+          const editable = record.editable || {};
+          const galleryUrls = galleryImageUrls(editable.gallery_images);
+          const previewUrl = galleryUrls[0] || "";
+          const sourceSummary = sourceCounts(record.fieldSources || {});
+          const fieldsHtml = fieldGroups.map((group) => `
+            <div class="fieldGroupTitle">${group.title}</div>
+            ${group.fields.map(([key, labelText, type]) => {
+              const value = String(editable[key] ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+              const control = type === "textarea"
+                ? `<textarea data-row="${record.row}" data-field="${key}">${value}</textarea>`
+                : `<input type="${type}" data-row="${record.row}" data-field="${key}" value="${value}" />`;
+              return `<div class="field ${type === "textarea" ? "full" : ""}"><label>${labelText}</label>${control}</div>`;
+            }).join("")}
+          `).join("");
+          const searchText = [
+            record.name,
+            record.city,
+            record.status,
+            record.sourceUrl,
+            editable.hotel_name,
+            editable.city,
+            editable.address,
+            editable.district,
+          ].filter(Boolean).join(" ").toLowerCase();
+          return `<article class="hotelCard" data-hotel-card="1" data-status="${record.status}" data-search="${escapeHtml(searchText)}">
+            <div class="hotelPreview">
+              <div class="imageBox">
+                <img data-preview-row="${record.row}" data-image-index="0" src="${previewUrl}" alt="${escapeHtml(record.name || "Hotel preview")}" onerror="this.style.display='none'" />
+                <div class="imageNav" data-nav-row="${record.row}" style="${galleryUrls.length > 1 ? "" : "display:none"}">
+                  <button type="button" data-image-prev="${record.row}">&lt;</button>
+                  <span class="imageCount" data-image-count="${record.row}">${galleryUrls.length ? `1/${galleryUrls.length}` : "0/0"}</span>
+                  <button type="button" data-image-next="${record.row}">&gt;</button>
+                </div>
+              </div>
+              <div class="hotelPreviewText">
+                <h3>${index + 1}. ${escapeHtml(record.name || "Khach san")}</h3>
+                <div class="hint">Trang thai: ${record.status} | Confidence: ${record.confidence ?? 0}% | Quality: ${record.quality?.score ?? 0}</div>
+                <div class="hint">Nguon: Agoda ${sourceSummary.agoda || 0}, OSM ${sourceSummary.osm || 0}, Generated ${sourceSummary.generated || 0}, Manual ${sourceSummary.manual || 0}</div>
+                <div class="hint">Anh preview uu tien lay tu Agoda/pix8. Bam &gt; de xem anh tiep theo.</div>
+              </div>
+            </div>
+            <div class="formGrid" style="margin-top:12px">${fieldsHtml}</div>
+          </article>`;
+        }).join("");
+        hotelCards.querySelectorAll('[data-field="gallery_images"]').forEach((input) => {
+          input.addEventListener("input", () => {
+            const image = hotelCards.querySelector(`[data-preview-row="${input.dataset.row}"]`);
+            if (!image) return;
+            const nextUrl = firstImageUrl(input.value);
+            image.src = nextUrl;
+            image.style.display = nextUrl ? "block" : "none";
+            image.dataset.imageIndex = "0";
+            updateImageNav(input.dataset.row, galleryImageUrls(input.value));
+          });
+        });
+        hotelCards.querySelectorAll("[data-image-prev], [data-image-next]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const row = button.dataset.imagePrev || button.dataset.imageNext;
+            const direction = button.dataset.imageNext ? 1 : -1;
+            moveImage(row, direction);
+          });
+        });
+      }
+
+      function normalizeSearch(value) {
+        return String(value || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .trim();
+      }
+
+      function sourceCounts(sources) {
+        return Object.values(sources || {}).reduce((counts, source) => {
+          counts[source] = (counts[source] || 0) + 1;
+          return counts;
+        }, {});
+      }
+
+      function firstImageUrl(galleryValue) {
+        return galleryImageUrls(galleryValue)[0] || "";
+      }
+
+      function galleryImageUrls(galleryValue) {
+        return String(galleryValue || "").split("|")
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .map((item) => {
+            const separatorIndex = item.indexOf(":");
+            return separatorIndex >= 0 ? item.slice(separatorIndex + 1).trim() : item;
+          })
+          .filter(Boolean);
+      }
+
+      function moveImage(row, direction) {
+        const input = hotelCards.querySelector(`[data-row="${row}"][data-field="gallery_images"]`);
+        const image = hotelCards.querySelector(`[data-preview-row="${row}"]`);
+        if (!input || !image) return;
+        const images = galleryImageUrls(input.value);
+        if (!images.length) return;
+        const current = Number(image.dataset.imageIndex || "0");
+        const next = (current + direction + images.length) % images.length;
+        image.dataset.imageIndex = String(next);
+        image.src = images[next];
+        image.style.display = "block";
+        updateImageNav(row, images);
+      }
+
+      function updateImageNav(row, images) {
+        const nav = hotelCards.querySelector(`[data-nav-row="${row}"]`);
+        const image = hotelCards.querySelector(`[data-preview-row="${row}"]`);
+        const count = hotelCards.querySelector(`[data-image-count="${row}"]`);
+        if (!nav || !image || !count) return;
+        nav.style.display = images.length > 1 ? "flex" : "none";
+        const index = Math.min(Number(image.dataset.imageIndex || "0"), Math.max(0, images.length - 1));
+        count.textContent = images.length ? `${index + 1}/${images.length}` : "0/0";
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+
+      function collectReviewEdits() {
+        const grouped = new Map();
+        hotelCards.querySelectorAll("[data-row][data-field]").forEach((input) => {
+          const row = input.dataset.row;
+          if (!grouped.has(row)) grouped.set(row, { row, fields: {} });
+          grouped.get(row).fields[input.dataset.field] = input.value;
+        });
+        return Array.from(grouped.values());
+      }
+
+      async function postJson(url, body) {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const error = new Error(data.error || "Request failed");
+          error.data = data;
+          throw error;
+        }
+        return data;
+      }
+
+      function hideSearchBox() {
+        searchBox.hidden = true;
+        showSearchBtn.hidden = false;
+      }
+
+      function showSearchBox() {
+        searchBox.hidden = false;
+        showSearchBtn.hidden = true;
+      }
+
+      showSearchBtn.addEventListener("click", showSearchBox);
+
+      async function searchAgoda() {
+        const query = agodaSearch.value.trim();
+        if (!query) {
+          searchHint.textContent = "Nhap ten khach san truoc.";
+          return;
+        }
+        searchAgodaBtn.disabled = true;
+        searchHint.textContent = "Dang tim link Agoda...";
+        searchResults.innerHTML = "";
+        try {
+          const result = await postJson("/api/search-agoda", {
+            query,
+            city: agodaCity.value.trim(),
+          });
+          renderSearchResults(result.results || []);
+          searchHint.textContent = result.total
+            ? `Tim thay ${result.total} link Agoda. Bam Them de dua vao danh sach.`
+            : "Chua tim thay link Agoda phu hop.";
+        } catch (error) {
+          searchHint.textContent = error.message;
+        } finally {
+          searchAgodaBtn.disabled = false;
+        }
+      }
+
+      function renderSearchResults(results) {
+        searchResults.innerHTML = results.map((item, index) => `
+          <div class="searchResult">
+            ${item.image ? `<img src="${escapeHtml(item.image)}" alt="" />` : `<div></div>`}
+            <div>
+              <strong>${index + 1}. ${escapeHtml(item.title || "Agoda hotel")}</strong>
+              ${item.city ? `<span>${escapeHtml(item.city)}</span>` : ""}
+              <span>${escapeHtml(item.url)}</span>
+            </div>
+            <div class="actions" style="margin-top:0">
+              <button type="button" data-set-agoda="${escapeHtml(item.url)}" data-add-title="${escapeHtml(item.title || "")}" data-add-city="${escapeHtml(item.city || "")}">Chon</button>
+              <button type="button" data-add-agoda="${escapeHtml(item.url)}" data-add-title="${escapeHtml(item.title || "")}" data-add-city="${escapeHtml(item.city || "")}">Cong them</button>
+            </div>
+          </div>
+        `).join("");
+        searchResults.querySelectorAll("[data-set-agoda]").forEach((button) => {
+          button.addEventListener("click", () => {
+            setAgodaUrl(button.dataset.setAgoda, button.dataset.addTitle, button.dataset.addCity);
+          });
+        });
+        searchResults.querySelectorAll("[data-add-agoda]").forEach((button) => {
+          button.addEventListener("click", () => {
+            addAgodaUrl(button.dataset.addAgoda, button.dataset.addTitle, button.dataset.addCity);
+          });
+        });
+      }
+
+      function buildAgodaLine(url, title, city) {
+        return [compactAgodaUrl(url), cleanAddedTitle(title), cleanAddedTitle(city) || agodaCity.value.trim() || "Hanoi", "VN"].join(",");
+      }
+
+      function compactAgodaUrl(url) {
+        try {
+          const parsed = new URL(url);
+          if (parsed.pathname === "/search") {
+            const hotelId = parsed.searchParams.get("hotel") || parsed.searchParams.get("selectedproperty");
+            if (hotelId) {
+              parsed.search = "";
+              parsed.searchParams.set("hotel", hotelId);
+              parsed.searchParams.set("selectedproperty", hotelId);
+            }
+          } else {
+            parsed.search = "";
+          }
+          parsed.hash = "";
+          return parsed.toString();
+        } catch {
+          return url;
+        }
+      }
+
+      function setAgodaUrl(url, title, city) {
+        urls.value = buildAgodaLine(url, title, city);
+        searchHint.textContent = "Da chon link moi va xoa link cu trong o Agoda URLs.";
+      }
+
+      function addAgodaUrl(url, title, city) {
+        const line = buildAgodaLine(url, title, city);
+        const current = urls.value.trim();
+        urls.value = current ? `${current}\n${line}` : line;
+        searchHint.textContent = "Da cong them link vao o Agoda URLs.";
+      }
+
+      function cleanAddedTitle(value) {
+        return String(value || "")
+          .replace(/,/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      searchAgodaBtn.addEventListener("click", searchAgoda);
+      agodaSearch.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") searchAgoda();
+      });
+      agodaCity.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") searchAgoda();
+      });
+
+      checkBtn.addEventListener("click", async () => {
+        renderStages(0, -1);
+        log.textContent = "Dang kiem tra URL...";
+        try {
+          const result = await postJson("/api/check", { urls: urls.value });
+          renderStages(-1, 0);
+          renderCheck(result.rows);
+          log.textContent = `Pass: ${result.pass}/${result.total}. Invalid: ${result.invalid}.`;
+        } catch (error) {
+          log.textContent = error.message;
+        }
+      });
+
+      runBtn.addEventListener("click", async () => {
+        checkBtn.disabled = true;
+        runBtn.disabled = true;
+        saveBtn.disabled = true;
+        hideSearchBox();
+        sql.textContent = "Dang cho SQL...";
+        files.innerHTML = "";
+        saveBox.textContent = "Chua luu du lieu nao.";
+        hotelCards.textContent = "Dang cho du lieu khach san...";
+        renderStages(1, 0);
+        log.textContent = "Dang tai du lieu that va fill phan thieu...";
+        const timer = setInterval(() => {
+          const active = Math.min(3, Math.max(1, Math.floor((Date.now() / 2200) % 4)));
+          renderStages(active, active - 1);
+        }, 900);
+        try {
+          const result = await postJson("/api/run", { urls: urls.value });
+          clearInterval(timer);
+          renderStages(-1, 4);
+          renderCheck(result.checked);
+          setStats(result.report?.totals);
+          lastReport = result.report || null;
+          renderHotelCards(lastReport);
+          log.textContent = `${result.stdout || ""}${result.stderr ? `\n${result.stderr}` : ""}`.trim() || "Hoan thanh.";
+          sql.textContent = result.sqlPreview || "Khong co SQL preview.";
+          files.innerHTML = Object.entries(result.files || {}).map(([key, value]) => `<div><strong>${key}:</strong> ${value}</div>`).join("");
+          saveBtn.disabled = !result.ok;
+        } catch (error) {
+          clearInterval(timer);
+          renderStages(-1, 0);
+          log.textContent = error.message;
+        } finally {
+          checkBtn.disabled = false;
+          runBtn.disabled = false;
+        }
+      });
+
+      queueRunBtn.addEventListener("click", async () => {
+        queueRunBtn.disabled = true;
+        runBtn.disabled = true;
+        saveBtn.disabled = true;
+        hideSearchBox();
+        renderStages(1, 0);
+        log.textContent = "Dang chay batch tu hang doi...";
+        try {
+          const limit = Math.max(1, Math.min(Number(batchLimit.value || 25), 100));
+          const result = await postJson("/api/queue/run", { limit });
+          renderStages(-1, 4);
+          renderQueue(result.queue?.items || []);
+          setStats(result.report?.totals);
+          lastReport = result.report || null;
+          renderHotelCards(lastReport);
+          sql.textContent = result.sqlPreview || "Khong co SQL preview.";
+          files.innerHTML = Object.entries(result.files || {}).map(([key, value]) => `<div><strong>${key}:</strong> ${value}</div>`).join("");
+          log.textContent = result.message || `${result.stdout || ""}${result.stderr ? `\n${result.stderr}` : ""}`.trim() || "Batch hoan thanh.";
+          saveBtn.disabled = !result.report;
+        } catch (error) {
+          log.textContent = error.message;
+        } finally {
+          queueRunBtn.disabled = false;
+          runBtn.disabled = false;
+        }
+      });
+
+      queueClearBtn.addEventListener("click", async () => {
+        if (!confirm("Xoa toan bo hang doi hien tai? Du lieu da saved/store se khong bi xoa.")) return;
+        queueClearBtn.disabled = true;
+        try {
+          const result = await postJson("/api/queue/clear", {});
+          renderQueue(result.queue?.items || []);
+          renderSavedSummary(result.savedSummary);
+          bulkHint.textContent = "Da xoa hang doi.";
+        } catch (error) {
+          bulkHint.textContent = `Khong xoa duoc hang doi: ${error.message}`;
+        } finally {
+          queueClearBtn.disabled = false;
+        }
+      });
+
+      bulkDiscoverBtn.addEventListener("click", async () => {
+        bulkDiscoverBtn.disabled = true;
+        queueRunBtn.disabled = true;
+        const city = bulkCity.value.trim() || "Hanoi";
+        const limit = Math.max(1, Math.min(Number(bulkLimit.value || 300), 500));
+        bulkHint.textContent = `Dang tim toi da ${limit} khach san o ${city}...`;
+        log.textContent = "Dang tim hang loat Agoda link va them vao hang doi...";
+        try {
+          const result = await postJson("/api/discover-agoda", { city, limit });
+          renderQueue(result.queue?.items || []);
+          bulkHint.textContent = `Tim duoc ${result.discovered || 0}, them moi ${result.added?.length || 0}, bo qua ${result.skipped?.length || 0} link trung/da co.`;
+          log.textContent = `Hang doi hien co ${result.queue?.items?.length || 0} khach san. Co the bam Chay batch de tai du lieu.`;
+        } catch (error) {
+          bulkHint.textContent = `Khong tim hang loat duoc: ${error.message}`;
+          log.textContent = error.message;
+        } finally {
+          bulkDiscoverBtn.disabled = false;
+          queueRunBtn.disabled = false;
+        }
+      });
+
+      async function saveData(overwriteDuplicate = false) {
+        saveBtn.disabled = true;
+        saveBox.textContent = overwriteDuplicate ? "Dang de du lieu cu..." : "Dang luu du lieu...";
+        const label = lastReport?.records?.[0]?.name || "hotel-import";
+        try {
+          const result = await postJson("/api/save", {
+            label,
+            edits: collectReviewEdits(),
+            overwriteDuplicate,
+            partnerId: Number(partnerSelect.value),
+          });
+          const files = result.manifest.files;
+          renderSavedSummary(result.savedSummary);
+          saveBox.innerHTML = `
+            <strong>Da cong them vao file chung:</strong> output/saved/apply.sql
+            <div class="hint">Da luu vao apply.sql: ${result.savedSummary?.savedHotels ?? "khong ro"} khach san</div>
+            <div class="hint">Partner: ${result.manifest.partnerId}</div>
+            <div class="hint">Lan nay luu ${result.savePolicy?.ready ?? "khong ro"} Ready, bo qua ${result.savePolicy?.skippedNeedsReview ?? 0} Needs review va ${result.savePolicy?.skippedFailed ?? 0} Failed.</div>
+            <div class="hint">SQL ap dung: ${files.sql}</div>
+          `;
+          saveBtn.disabled = false;
+          loadQueue();
+        } catch (error) {
+          if (error.data?.duplicate) {
+            const info = error.data.duplicateInfo || {};
+            saveBox.innerHTML = `
+              <strong>Da tung luu roi:</strong> ${info.matchedUrl || ""}
+              <div class="hint">Lan luu truoc: ${info.savedAt || "khong ro"}</div>
+              <div class="hint">Nhan: ${info.label || "khong ro"}</div>
+              <div class="actions">
+                <button id="overwriteSavedBtn" class="danger">De du lieu cu</button>
+                <button id="keepSavedBtn">Giu du lieu cu</button>
+              </div>
+            `;
+            document.querySelector("#overwriteSavedBtn").addEventListener("click", () => saveData(true));
+            document.querySelector("#keepSavedBtn").addEventListener("click", () => {
+              saveBox.innerHTML = `
+                <strong>Da giu du lieu cu.</strong>
+                <div class="hint">Khong ghi them va khong de file saved.</div>
+              `;
+              saveBtn.disabled = false;
+            });
+          } else {
+            saveBox.innerHTML = `<strong>Khong luu:</strong> ${error.message}`;
+            saveBtn.disabled = false;
+          }
+        }
+      }
+
+      saveBtn.addEventListener("click", async () => {
+        await saveData(false);
+      });
+
+      applyDataSqlBtn.addEventListener("click", async () => {
+        applyDataSqlBtn.disabled = true;
+        saveBox.textContent = "Dang nap apply.sql vao DB live va dong bo data.sql...";
+        try {
+          const result = await postJson("/api/apply-to-data-sql", {});
+          renderSavedSummary(result.savedSummary);
+          const info = result.result || {};
+          const distribution = (info.distribution || [])
+            .map((item) => `Partner ${item.partnerId}: ${item.hotels}`)
+            .join(" | ");
+          saveBox.innerHTML = `
+            <strong>Da nap vao DB live va data.sql.</strong>
+            <div class="hint">Da nap: ${info.appendedHotels || 0} khach san. Bo qua slug trung: ${info.skippedDuplicateSlugs || 0}. Bo qua slug da co: ${info.skippedExistingSlugs || 0}.</div>
+            <div class="hint">${escapeHtml(distribution || "Khong co phan bo partner")}</div>
+            <div class="hint">Tat ca khach san giu trang thai pending_review. apply.sql da ve 0.</div>
+          `;
+        } catch (error) {
+          saveBox.innerHTML = `<strong>Khong nap duoc data.sql:</strong> ${escapeHtml(error.message)}`;
+        } finally {
+          const count = Number((await fetch("/api/saved-summary").then((res) => res.json()).catch(() => ({}))).savedSummary?.savedHotels || 0);
+          applyDataSqlBtn.disabled = count <= 0;
+        }
+      });
+
+      renderStages();
+      urls.value = sample;
+      loadPartners();
+      loadQueue();
+    </script>
+  </body>
+</html>
