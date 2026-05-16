@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: nowayhome-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234" # Thay bằng pass của bạn
+      MYSQL_DATABASE: agoda_clone
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+volumes:
+  mysql_data:

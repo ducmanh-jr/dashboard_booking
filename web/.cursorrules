@@ -1,0 +1,14 @@
+# LUẬT VẬN HÀNH AI - NOWAYHOME WEB APP (REACT/VITE)
+
+## 1. NGUYÊN TẮC CỐT LÕI (KARPATHY PRINCIPLES)
+
+- Surgical Changes: Tập trung vào scope công việc, không format lại toàn bộ file.
+- Simplicity First: Code Functional Component đơn giản.
+- Think Before Coding: Phân tích UI states (Loading, Success, Error) trước khi viết JSX.
+
+## 2. RÀNG BUỘC CÔNG NGHỆ (WEB FRONTEND)
+
+- State Management: Dùng `useState` cho local state. Dùng `Zustand` cho global state. CẤM dùng Redux.
+- Styling: Sử dụng Tailwind CSS. Phải có style cho 3 trạng thái của nút bấm: hover, active, disabled.
+- TypeScript: Bắt buộc định nghĩa interface rõ ràng từ Schema. Cấm dùng kiểu `any`.
+- Tách biệt: Thư mục gọi API (`axios`) phải tách rời khỏi thư mục UI Component.
