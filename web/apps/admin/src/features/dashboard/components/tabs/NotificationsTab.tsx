@@ -1,68 +1,111 @@
-﻿import { useState, useEffect } from "react";
-import { api } from "@nowayhome/api-client";
+import { useState, useEffect } from "react";
+import { fetchNotifications, markAsRead, deleteNotification, markReadAll as markReadAllApi } from "../../../../api/notificationsApi";
 import { AppNotification } from "../../../../shared/types";
+import { cn } from "../../../../shared/components/ui";
 
-export function NotificationsTab({ onNavigate, onRefreshCount }: { onNavigate: (tab: any, filter: string) => void, onRefreshCount?: () => void }) {
-  const [list, setList] = useState<AppNotification[]>([]);
-  const [loading, setLoading] = useState(false);
+function formatType(type: string) {
+  return type.replace(/_/g, " ");
+}
 
-  async function load() {
-    setLoading(true);
-    try {
-      const result = await api("/notifications?limit=50");
-      setList(result.notifications || []);
-    } catch { }
-    finally { setLoading(false); }
-  }
+function notificationTone(type: string) {
+  if (type.includes("delete") || type.includes("reject")) return "bg-red-500";
+  if (type.includes("approve") || type.includes("creation") || type.includes("registration")) return "bg-emerald-500";
+  if (type.includes("request") || type.includes("review")) return "bg-amber-500";
+  return "bg-indigo-500";
+}
+
+function notificationBadgeTone(type: string) {
+  if (type.includes("delete") || type.includes("reject")) return "border-red-100 bg-red-50 text-red-700";
+  if (type.includes("approve") || type.includes("creation") || type.includes("registration")) return "border-emerald-100 bg-emerald-50 text-emerald-700";
+  if (type.includes("request") || type.includes("review")) return "border-amber-100 bg-amber-50 text-amber-700";
+  return "border-indigo-100 bg-indigo-50 text-indigo-700";
+}
+
+let cachedAdminNotificationList: AppNotification[] | null = null;
+
+export function NotificationsTab({ onNavigate, onRefreshCount }: { onNavigate: (tab: string, filter: string, targetId?: number) => void, onRefreshCount?: () => void }) {
+  const [list, setList] = useState<AppNotification[]>(cachedAdminNotificationList || []);
+  const [isLoading, setIsLoading] = useState(!cachedAdminNotificationList);
 
   useEffect(() => {
     load();
   }, []);
 
+  async function load() {
+    setIsLoading(list.length === 0);
+    try {
+      const result = await fetchNotifications();
+      const nextList = result.notifications || [];
+      cachedAdminNotificationList = nextList;
+      setList(nextList);
+    } catch { }
+    finally { setIsLoading(false); }
+  }
+
+  function updateList(updater: (items: AppNotification[]) => AppNotification[]) {
+    setList((items) => {
+      const nextList = updater(items);
+      cachedAdminNotificationList = nextList;
+      return nextList;
+    });
+  }
+
   async function markRead(id: number) {
     try {
-      await api(`/notifications/${id}/read`, { method: "POST" });
-      setList(list.map(n => n.id === id ? { ...n, isRead: true } : n));
+      await markAsRead(id);
+      updateList((items) => items.map((item) => item.id === id ? { ...item, isRead: true } : item));
       onRefreshCount?.();
     } catch { }
   }
 
-  async function remove(id: number) {
+  async function remove(id: number, event: React.MouseEvent) {
+    event.stopPropagation();
     if (!confirm("Xóa thông báo này?")) return;
     try {
-      await api(`/notifications/${id}`, { method: "DELETE" });
-      setList(list.filter(n => n.id !== id));
+      await deleteNotification(id);
+      updateList((items) => items.filter((item) => item.id !== id));
       onRefreshCount?.();
     } catch { }
   }
 
   async function markReadAll() {
     try {
-      await api("/notifications/read-all", { method: "POST" });
-      setList(list.map(n => ({ ...n, isRead: true })));
+      await markReadAllApi();
+      updateList((items) => items.map((item) => ({ ...item, isRead: true })));
       onRefreshCount?.();
     } catch { }
   }
 
   function handleClick(n: AppNotification) {
-    markRead(n.id);
+    if (!n.isRead) markRead(n.id);
     if (n.type === "new_partner_registration") {
-      onNavigate("partners", "pending");
-    } else if (n.type === "new_property_creation" || n.type === "property_update_request" || n.type === "property_delete_request") {
-      onNavigate("rooms", "pending");
+      onNavigate("partners", "pending", n.entityId);
+    } else if (n.type === "property_review" || n.type === "property_update_request" || n.type === "property_delete_request" || n.type === "new_property_creation") {
+      onNavigate("rooms", "pending", n.entityId);
     }
   }
 
-  if (loading && list.length === 0) return <div className="text-center py-20 text-gray-500 animate-pulse">Đang tải thông báo...</div>;
+  if (isLoading && list.length === 0) {
+    return (
+      <div className="animate-pulse space-y-3">
+        <div className="h-12 rounded-lg bg-muted" />
+        {[1, 2, 3, 4].map((item) => <div key={item} className="h-20 rounded-lg bg-muted" />)}
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Tất cả thông báo</div>
-        {list.length > 0 && (
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-slate-950">Thông báo hệ thống</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Theo dõi hoạt động đăng ký đối tác và các yêu cầu thay đổi phòng.</p>
+        </div>
+        {list.some((item) => !item.isRead) && (
           <button
+            type="button"
             onClick={markReadAll}
-            className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent transition-colors font-medium"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 cursor-pointer"
           >
             Đánh dấu đã đọc tất cả
           </button>
@@ -70,38 +113,47 @@ export function NotificationsTab({ onNavigate, onRefreshCount }: { onNavigate: (
       </div>
 
       {list.length === 0 ? (
-        <div className="py-20 text-center border rounded-2xl bg-muted/20 border-dashed">
-          <div className="text-muted-foreground italic text-sm">Không có thong bao nao</div>
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
+          <h3 className="text-sm font-bold text-slate-950">Chưa có thông báo</h3>
+          <p className="mt-2 text-sm text-slate-500">Khi có hoạt động từ đối tác, thông báo sẽ xuất hiện tại đây.</p>
         </div>
       ) : (
-        <div className="bg-card border rounded-2xl overflow-hidden shadow-sm divide-y">
-          {list.map((n) => (
+        <div className="space-y-2">
+          {list.map((item) => (
             <div
-              key={n.id}
-              onClick={() => handleClick(n)}
-              className={`p-5 hover:bg-accent cursor-pointer transition-colors flex gap-4 items-start relative group ${!n.isRead ? "bg-primary/5 border-l-4 border-l-primary" : "opacity-80"}`}
+              key={item.id}
+              onClick={() => handleClick(item)}
+              className={cn(
+                "group flex cursor-pointer items-center gap-3 rounded-full border px-4 py-2.5 shadow-sm transition hover:-translate-y-px hover:shadow-md",
+                !item.isRead
+                  ? "border-indigo-100 bg-gradient-to-r from-white via-white to-indigo-50/70"
+                  : "border-slate-200 bg-white/80"
+              )}
             >
-              <div className={`w-1.5 h-1.5 mt-2 rounded-full shrink-0 ${!n.isRead ? "bg-primary animate-pulse" : "bg-transparent"}`} />
-              <div className="flex-1 min-w-0 text-left">
-                <div className="flex justify-between items-start mb-1">
-                  <div className={`font-bold text-sm ${!n.isRead ? "text-foreground" : "text-muted-foreground"}`}>{n.title}</div>
-                  <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                    {new Date(n.createdAt).toLocaleString("vi-VN", { dateStyle: 'short', timeStyle: 'short' })}
-                  </span>
+              <div className={cn("h-2.5 w-2.5 shrink-0 rounded-full", item.isRead ? "bg-slate-300" : notificationTone(item.type))} />
+
+              <div className="min-w-0 flex-1 text-left">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h3 className={cn("truncate text-sm font-bold", item.isRead ? "text-slate-600" : "text-slate-950")}>{item.title}</h3>
+                  {!item.isRead && <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white shadow-sm">Mới</span>}
+                  <span className={cn("hidden rounded-full border px-2 py-0.5 text-[10px] font-bold sm:inline-flex uppercase", notificationBadgeTone(item.type))}>{formatType(item.type)}</span>
                 </div>
-                {n.body && <div className="text-xs text-muted-foreground leading-relaxed">{n.body}</div>}
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 bg-muted rounded text-muted-foreground">
-                    {n.type.replace(/_/g, ' ')}
-                  </span>
-                </div>
+                {item.body && <p className={cn("mt-0.5 truncate text-xs", item.isRead ? "text-slate-500" : "font-medium text-slate-700")}>{item.body}</p>}
               </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); remove(n.id); }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all font-bold text-lg"
-              >
-                ×
-              </button>
+
+              <div className="flex shrink-0 items-center gap-2">
+                <span className={cn("hidden rounded-full px-2 py-0.5 text-xs font-medium sm:inline", item.isRead ? "bg-slate-100 text-slate-500" : "bg-indigo-100 text-indigo-700")}>{new Date(item.createdAt).toLocaleDateString("vi-VN")}</span>
+                <button
+                  type="button"
+                  onClick={(event) => remove(item.id, event)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 opacity-100 transition hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
+                  title="Đóng / Xóa"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -109,8 +161,3 @@ export function NotificationsTab({ onNavigate, onRefreshCount }: { onNavigate: (
     </div>
   );
 }
-
-
-
-
-

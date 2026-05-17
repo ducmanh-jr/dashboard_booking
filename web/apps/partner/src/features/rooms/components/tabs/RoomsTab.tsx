@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "@nowayhome/api-client";
+import { fetchRooms, requestDeleteRoom, fetchAvailability, updateAvailability, bulkUpdateAvailability } from "../../../../api/roomsApi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Room } from "../../../../shared/types";
 
@@ -89,11 +89,16 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
   const [message, setMessage] = useState(location.state?.message || "");
   const navigate = useNavigate();
 
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   async function loadRooms(forceSkeleton = false) {
     setLoading(forceSkeleton || rooms.length === 0);
     try {
-      const result = await api("/rooms/mine");
-      const nextRooms = result.rooms || [];
+      const result = await fetchRooms();
+      const nextRooms = result.hotels || [];
       cachedRooms = nextRooms;
       setRooms(nextRooms);
     } finally {
@@ -111,7 +116,7 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
   async function requestDelete(room: Room) {
     if (!confirm(`Gửi yêu cầu xóa khách sạn "${room.name}"?`)) return;
     try {
-      await api(`/rooms/${room.id}/request-delete`, { method: "DELETE" });
+      await requestDeleteRoom(room.id);
       setMessage(`Đã gửi yêu cầu xóa khách sạn "${room.name}" chờ admin duyệt.`);
       await loadRooms(false);
     } catch (error: any) {
@@ -157,14 +162,14 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-950">Khách sạn của tôi</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Quản lý hồ sơ, trạng thái duyệt và các yêu cầu đang chờ xử lý.</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Quản lý hồ sơ, trạng thái duyệt và các yêu cầu đang chờ xử lý.</p>
         </div>
         <button
           type="button"
           onClick={() => navigate("/create")}
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-3.5 py-2 text-[13px] font-bold text-primary-foreground shadow-sm transition hover:bg-primary/90 active:scale-[0.99]"
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition hover:opacity-90 active:scale-[0.99]"
         >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v14m7-7H5" />
           </svg>
           Thêm khách sạn
@@ -178,29 +183,31 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
         <StatCard label="Yêu cầu chờ" value={stats.pendingRequests} tone="indigo" />
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="rounded-xl border border-slate-100 bg-[#fdfbff] p-2 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative flex-1">
-            <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
             </svg>
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Tìm theo tên, địa chỉ, thành phố..."
-              className="h-10 w-full rounded-md border bg-white pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+              className="h-9 w-full rounded-lg border bg-white pl-9 pr-3 text-xs outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
             />
           </div>
 
-          <div className="flex gap-1 overflow-x-auto rounded-md border bg-slate-50 p-1">
+          <div className="flex gap-0.5 overflow-x-auto rounded-lg border border-slate-200/50 bg-slate-100 p-0.5 shadow-inner">
             {(["all", "approved", "pending", "rejected", "request"] as StatusFilter[]).map((item) => (
               <button
                 key={item}
                 type="button"
                 onClick={() => setFilter(item)}
                 className={cn(
-                  "whitespace-nowrap rounded px-3 py-1.5 text-xs font-bold transition",
-                  filter === item ? "bg-white text-primary shadow-sm" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"
+                  "whitespace-nowrap rounded-md px-3 py-1 text-[11px] font-semibold transition outline-none",
+                  filter === item 
+                    ? "bg-white text-primary shadow-sm" 
+                    : "text-slate-500 hover:text-slate-800 hover:bg-white/30"
                 )}
               >
                 {filterLabel(item)}
@@ -238,39 +245,39 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
               <article
                 key={room.id}
                 className={cn(
-                  "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-primary/40 hover:shadow-md",
+                  "overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:border-primary/40 hover:shadow-md flex flex-col sm:flex-row sm:items-stretch",
                   room.pendingRequest?.action === "delete" && "opacity-80"
                 )}
               >
-                <div className="grid gap-4 p-3 sm:grid-cols-[136px_1fr] lg:grid-cols-[136px_1fr_auto]">
-                  <button
-                    type="button"
-                    onClick={() => onDetail(room)}
-                    className="h-32 overflow-hidden rounded-md border bg-slate-100 text-left sm:h-full"
-                  >
-                    {thumbnail ? (
-                      <img src={thumbnail} alt={room.name} className="h-full min-h-32 w-full object-cover transition duration-300 hover:scale-105" />
-                    ) : (
-                      <div className="flex h-full min-h-32 items-center justify-center text-xs font-bold text-slate-400">Chưa có ảnh</div>
-                    )}
-                  </button>
+                <button
+                  type="button"
+                  onClick={() => onDetail(room)}
+                  className="relative w-full h-44 sm:h-auto sm:w-[152px] overflow-hidden bg-slate-50 border-b sm:border-b-0 sm:border-r border-slate-100 text-left flex-shrink-0 outline-none"
+                >
+                  {thumbnail ? (
+                    <img src={thumbnail} alt={room.name} className="absolute inset-0 h-full w-full object-cover transition duration-300 hover:scale-105" />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-400">Chưa có ảnh</div>
+                  )}
+                </button>
 
-                  <div className="min-w-0 py-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="truncate text-base font-bold text-slate-950">{room.name}</h3>
-                      <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase", statusClass(room.status))}>
+                <div className="flex-1 min-w-0 p-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <h3 className="truncate text-sm font-bold text-slate-950">{room.name}</h3>
+                      <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase", statusClass(room.status))}>
                         {statusLabel(room.status)}
                       </span>
                       {hasPendingRequest && (
-                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-700">
                           {requestLabel(room.pendingRequest)}
                         </span>
                       )}
                     </div>
 
-                    <p className="mt-1 line-clamp-1 text-xs text-slate-500">{room.address}</p>
+                    <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">{room.address}</p>
 
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                    <div className="mt-2.5 grid grid-cols-2 gap-1.5 text-xs sm:grid-cols-4">
                       <InlineMetric label="Loại" value={room.roomType} />
                       <InlineMetric label="Giá từ" value={minPrice ? `${fmtVnd(minPrice)}/đêm` : "-"} />
                       <InlineMetric label="Sức chứa" value={`${room.capacity} khách`} />
@@ -278,30 +285,30 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
                     </div>
 
                     {room.status === "rejected" && room.rejectReason && (
-                      <div className="mt-3 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                      <div className="mt-2 rounded-md border border-red-100 bg-red-50 px-2.5 py-1.5 text-[11px] font-medium text-red-700">
                         Lý do từ chối: {room.rejectReason}
                       </div>
                     )}
 
                     {room.pendingRequest?.note && (
-                      <div className="mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                      <div className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-800">
                         Ghi chú admin: {room.pendingRequest.note}
                       </div>
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 border-t pt-3 lg:w-40 lg:flex-col lg:items-stretch lg:border-l lg:border-t-0 lg:pl-4 lg:pt-1">
+                  <div className="flex flex-wrap items-center gap-1 border-t pt-2.5 lg:w-[108px] lg:flex-col lg:items-stretch lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0 lg:border-slate-100/80">
                     <button
                       type="button"
                       onClick={() => onDetail(room)}
-                      className="rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100"
+                      className="rounded-md border border-indigo-100/50 bg-indigo-50/40 px-2 py-1 text-[10.5px] font-bold text-indigo-600 transition hover:bg-indigo-50/80"
                     >
                       Chi tiết
                     </button>
                     <button
                       type="button"
                       onClick={() => setAvailabilityRoom(room)}
-                      className="rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
+                      className="rounded-md border border-emerald-100/50 bg-emerald-50/40 px-2 py-1 text-[10.5px] font-bold text-emerald-600 transition hover:bg-emerald-50/80"
                     >
                       Tồn kho
                     </button>
@@ -309,7 +316,7 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
                       type="button"
                       onClick={() => navigate(`/edit/${room.id}`)}
                       disabled={hasPendingRequest}
-                      className="rounded-md border bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-md border border-slate-200/50 bg-white px-2 py-1 text-[10.5px] font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Sửa
                     </button>
@@ -317,7 +324,7 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
                       type="button"
                       onClick={() => requestDelete(room)}
                       disabled={hasPendingRequest}
-                      className="rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-md border border-rose-100/50 bg-rose-50/40 px-2 py-1 text-[10.5px] font-bold text-rose-600 transition hover:bg-rose-100/80 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Yêu cầu xóa
                     </button>
@@ -337,17 +344,17 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
 
 function StatCard({ label, value, tone }: { label: string; value: number; tone: "slate" | "emerald" | "amber" | "indigo" }) {
   const toneClass = {
-    slate: "bg-slate-50 text-slate-700 border-slate-200",
-    emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    amber: "bg-amber-50 text-amber-700 border-amber-200",
-    indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    slate: "bg-slate-50 text-slate-600 border-slate-200",
+    emerald: "bg-emerald-50/70 text-emerald-600 border-emerald-100",
+    amber: "bg-amber-50/70 text-amber-600 border-amber-100",
+    indigo: "bg-indigo-50/70 text-indigo-600 border-indigo-100",
   }[tone];
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-100 bg-[#fdfbff] p-3 px-4 shadow-sm hover:border-slate-200 transition-all">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-[13px] font-medium text-slate-600">{label}</div>
-        <div className={cn("rounded-md border px-2.5 py-1 text-lg font-bold leading-none", toneClass)}>{value}</div>
+        <div className="text-[11.5px] font-semibold text-zinc-500">{label}</div>
+        <div className={cn("rounded-md border px-2 py-0.5 text-xs font-extrabold leading-none", toneClass)}>{value}</div>
       </div>
     </div>
   );
@@ -381,8 +388,8 @@ function fmtWeekday(dateText: string) {
 }
 
 function AvailabilityModal({ room, onClose }: { room: Room; onClose: () => void }) {
-  const [from, setFrom] = useState(todayDate());
-  const [to, setTo] = useState(addDays(todayDate(), 30));
+  const [from, setFrom] = useState(() => todayDate());
+  const [to, setTo] = useState(() => addDays(todayDate(), 30));
   const [data, setData] = useState<AvailabilityResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -393,7 +400,7 @@ function AvailabilityModal({ room, onClose }: { room: Room; onClose: () => void 
     setLoading(true);
     setErr("");
     try {
-      const result = await api(`/partner/availability?propertyId=${room.id}&from=${from}&to=${to}`);
+      const result = await fetchAvailability(room.id, from, to);
       setData(result);
     } catch (error: any) {
       setErr(error.message || "Không tải được tồn kho");
@@ -564,9 +571,7 @@ function AvailabilityEditModal({
     setSaving(true);
     setErr("");
     try {
-      await api("/partner/availability", {
-        method: "PATCH",
-        body: JSON.stringify({
+      await updateAvailability({
           propertyId: room.id,
           priceId: editing.price.priceId,
           date: editing.day.date,
@@ -574,8 +579,7 @@ function AvailabilityEditModal({
           openInventory: Number(openInventory),
           isClosed,
           reset,
-        }),
-      });
+        });
       onSaved();
     } catch (error: any) {
       setErr(error.message || "Không lưu được thay đổi");
@@ -676,9 +680,7 @@ function AvailabilityBulkEditModal({
     setSaving(true);
     setErr("");
     try {
-      const result = await api("/partner/availability/bulk", {
-        method: "PATCH",
-        body: JSON.stringify({
+      const result = await bulkUpdateAvailability({
           propertyId: room.id,
           priceId: price.priceId,
           from,
@@ -689,8 +691,7 @@ function AvailabilityBulkEditModal({
           skipBookedDays,
           applyForever,
           reset,
-        }),
-      });
+        });
       const skipped = Number(result.skipped?.length || 0);
       if (skipped > 0) {
         alert(`Đã cập nhật ${result.updated} ngày, bỏ qua ${skipped} ngày đã có booking vượt số phòng mới.`);

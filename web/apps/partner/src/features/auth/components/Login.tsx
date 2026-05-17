@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { api } from "@nowayhome/api-client";
+import { login, registerPartner } from "../../../api/authApi";
 import { AuthLayout, GoogleButton } from "@nowayhome/auth-ui";
 import { User } from "../../../shared/types";
 
@@ -19,14 +19,11 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
     setLoading(true);
     try {
       if (mode === "login") {
-        const result = await api("/auth/login", {
-          method: "POST",
-          body: JSON.stringify({ email: form.email, password: form.password }),
-        });
+        const result = await login({ email: form.email, password: form.password });
         if (result.user?.role !== "partner") throw new Error("Tai khoan nay khong phai doi tac");
         onLogin(result.user);
       } else {
-        await api("/auth/register", { method: "POST", body: JSON.stringify(form) });
+        await registerPartner(form);
         setPending({ email: form.email, hotelName: form.hotelName });
       }
     } catch (error: any) {

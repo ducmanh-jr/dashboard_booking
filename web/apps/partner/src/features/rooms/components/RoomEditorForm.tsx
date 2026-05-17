@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { api } from "@nowayhome/api-client";
+import { searchPlaces, createRoom, requestUpdateRoom, fetchNearbyPlaces } from "../../../api/roomsApi";
 import { Room, NearbyPlace, ROOM_TYPES, CÓMMON_AMENITIES } from "../../../shared/types";
 
 const REQUIRED_IMAGE_SLOTS = [
@@ -77,7 +77,10 @@ function fmtVnd(value: number) {
 }
 
 function inferCityFromAddress(label: string) {
-  const parts = label.split(",").map((part) => part.trim()).filter(Boolean);
+  const parts = label.split(",").flatMap((part) => {
+    const p = part.trim();
+    return p ? [p] : [];
+  });
   const ignored = new Set(["vietnam", "viet nam", "viet nam"]);
   for (let i = parts.length - 1; i >= 0; i -= 1) {
     const normalized = parts[i].toLowerCase();
@@ -155,25 +158,24 @@ async function fetchNearbyDirect(lat: number, lon: number, radius: number, cats:
       const data = await response.json();
       const seen = new Set<string>();
       const results = (data.elements || [])
-        .map((element: any) => {
+        .flatMap((element: any) => {
           const tags = (element.tags || {}) as Record<string, string | undefined>;
           const pointLat = element.type === "node" ? Number(element.lat) : Number(element.center?.lat);
           const pointLon = element.type === "node" ? Number(element.lon) : Number(element.center?.lon);
           const name = tags["name:vi"] || tags.name || tags["name:en"] || "";
           const category = detectNearbyCategory(tags);
-          if (!Number.isFinite(pointLat) || !Number.isFinite(pointLon) || !hasMeaningfulName(name) || !category) return null;
+          if (!Number.isFinite(pointLat) || !Number.isFinite(pointLon) || !hasMeaningfulName(name) || !category) return [];
           const dedupeKey = `${name}|${pointLat.toFixed(5)}|${pointLon.toFixed(5)}`;
-          if (seen.has(dedupeKey)) return null;
+          if (seen.has(dedupeKey)) return [];
           seen.add(dedupeKey);
-          return {
+          return [{
             name,
             type: getNearbyLabel(category),
             distanceM: Math.round(haversine(lat, lon, pointLat, pointLon)),
             lat: pointLat,
             lon: pointLon,
-          };
+          }];
         })
-        .filter(Boolean)
         .sort((a: any, b: any) => a.distanceM - b.distanceM)
         .slice(0, 50);
       return results as NearbyPlace[];
@@ -293,7 +295,7 @@ export function RoomEditorForm({
     setSearching(true);
     setErr("");
     try {
-      const result = await api(`/places/search?q=${encodeURIComponent(addressQuery)}`);
+      const result = await searchPlaces(addressQuery);
       setAddressResults(result.results);
     } catch (error: any) {
       setErr(error.message);
@@ -315,7 +317,7 @@ export function RoomEditorForm({
         return;
       }
       const cats = selectedCats.join(",");
-      const result = await api(`/places/nearby?lat=${picked.lat}&lon=${picked.lon}&radius=${radius}&cats=${cats}`);
+      const result = await fetchNearbyPlaces(picked.lat, picked.lon, radius, cats);
       setNearby(result.results);
     } catch (error: any) {
       setErr(error.message);
@@ -464,10 +466,10 @@ export function RoomEditorForm({
       };
 
       if (mode === "create") {
-        await api("/rooms", { method: "POST", body: JSON.stringify(body) });
+        await createRoom(body);
         onDone("Đã gửi khách sạn mới chờ admin duyệt.");
       } else if (room) {
-        await api(`/rooms/${room.id}/request-update`, { method: "PATCH", body: JSON.stringify(body) });
+        await requestUpdateRoom(room.id, body);
         onDone(`Đã gửi yêu cầu sửa khách sạn "${name}" chờ admin duyệt.`);
       }
 

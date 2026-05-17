@@ -28,6 +28,7 @@ export type AppNotification = {
   type: string;
   title: string;
   body: string;
+  entityId?: number;
   isRead: boolean;
   createdAt: string;
 };

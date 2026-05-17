@@ -5,8 +5,6 @@ export function AuthLayout({
   subtitle = "Please enter your details",
   children,
   footer,
-  heroTitle: _heroTitle,
-  heroDescription: _heroDescription,
 }: {
   title: string;
   subtitle?: string;
@@ -30,19 +28,19 @@ export function AuthLayout({
       }}
     >
       {/* Background Blobs */}
-      <div style={{ position: "absolute", top: "-10%", left: "-10%", width: "40%", height: "40%", background: "radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, transparent 70%)", filter: "blur(60px)", pointerEvents: "none" }} />
-      <div style={{ position: "absolute", bottom: "-10%", right: "-10%", width: "50%", height: "50%", background: "radial-gradient(circle, rgba(236, 72, 153, 0.05) 0%, transparent 70%)", filter: "blur(80px)", pointerEvents: "none" }} />
-      <div style={{ position: "absolute", top: "20%", right: "10%", width: "30%", height: "30%", background: "radial-gradient(circle, rgba(245, 158, 11, 0.04) 0%, transparent 70%)", filter: "blur(50px)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", top: "-10%", left: "-10%", width: "40%", height: "40%", background: "radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, transparent 70%)", filter: "blur(40px)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", bottom: "-10%", right: "-10%", width: "50%", height: "50%", background: "radial-gradient(circle, rgba(236, 72, 153, 0.05) 0%, transparent 70%)", filter: "blur(40px)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", top: "20%", right: "10%", width: "30%", height: "30%", background: "radial-gradient(circle, rgba(245, 158, 11, 0.04) 0%, transparent 70%)", filter: "blur(40px)", pointerEvents: "none" }} />
 
       <div
         style={{
           width: "100%",
-          maxWidth: 400,
+          maxWidth: "400px",
           background: "rgba(255, 255, 255, 0.8)",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
           border: "1px solid rgba(255, 255, 255, 0.3)",
-          borderRadius: 32,
+          borderRadius: "32px",
           boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.08)",
           padding: "48px 40px",
           display: "flex",
@@ -53,7 +51,7 @@ export function AuthLayout({
         }}
       >
         <div style={{ width: "100%" }}>
-          <p style={{ margin: 0, color: "#64748b", fontSize: 11, lineHeight: "16px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          <p style={{ margin: 0, color: "#64748b", fontSize: 12, lineHeight: "16px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
             {subtitle}
           </p>
           <h1
@@ -62,7 +60,7 @@ export function AuthLayout({
               color: "#0f172a",
               fontSize: 22,
               lineHeight: 1.2,
-              fontWeight: 800,
+              fontWeight: 700,
               letterSpacing: "-0.02em",
             }}
           >

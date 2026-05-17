@@ -37,15 +37,17 @@ export function GoogleButton({
         justifyContent: "center",
         gap: 12,
         cursor: "pointer",
-        transition: "all 0.2s",
+        transition: "background 0.2s, border-color 0.2s",
       }}
       onMouseOver={(e) => {
-        e.currentTarget.style.background = "#f8fafc";
-        e.currentTarget.style.borderColor = "#cbd5e1";
+        const target = e.currentTarget as HTMLButtonElement;
+        target.style.background = "#f8fafc";
+        target.style.borderColor = "#cbd5e1";
       }}
       onMouseOut={(e) => {
-        e.currentTarget.style.background = "#fff";
-        e.currentTarget.style.borderColor = "#e2e8f0";
+        const target = e.currentTarget as HTMLButtonElement;
+        target.style.background = "#fff";
+        target.style.borderColor = "#e2e8f0";
       }}
     >
       <GoogleIcon />

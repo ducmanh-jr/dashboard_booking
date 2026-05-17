@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "@nowayhome/api-client";
+import { fetchNotifications, markAsRead, deleteNotification, markReadAll as markReadAllApi } from "../../../../api/notificationsApi";
 import { useNavigate } from "react-router-dom";
 import { PartnerNotification } from "../../../../shared/types";
 
@@ -35,7 +35,7 @@ export function NotificationsTab() {
   async function load() {
     setLoading(list.length === 0);
     try {
-      const result = await api("/notifications");
+      const result = await fetchNotifications();
       const nextList = result.notifications || [];
       cachedNotificationList = nextList;
       setList(nextList);
@@ -59,7 +59,7 @@ export function NotificationsTab() {
 
   async function markRead(id: number) {
     try {
-      await api(`/notifications/${id}/read`, { method: "POST" });
+      await markAsRead(id);
       updateList((items) => items.map((item) => item.id === id ? { ...item, isRead: true } : item));
     } catch {}
   }
@@ -67,14 +67,14 @@ export function NotificationsTab() {
   async function remove(id: number) {
     if (!confirm("Xóa thông báo này?")) return;
     try {
-      await api(`/notifications/${id}`, { method: "DELETE" });
+      await deleteNotification(id);
       updateList((items) => items.filter((item) => item.id !== id));
     } catch {}
   }
 
   async function markReadAll() {
     try {
-      await api("/notifications/read-all", { method: "POST" });
+      await markReadAllApi();
       updateList((items) => items.map((item) => ({ ...item, isRead: true })));
     } catch {}
   }
@@ -148,11 +148,11 @@ export function NotificationsTab() {
                     event.stopPropagation();
                     remove(item.id);
                   }}
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 opacity-100 transition hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100"
-                  title="Xóa"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 opacity-100 transition hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
+                  title="Đóng / Xóa"
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 7h12M9 7V5h6v2m-7 0 .7 12h6.6L16 7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { api } from "@nowayhome/api-client";
+import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "../../../../shared/components/ui";
+import { fetchBookingReport, markBookingPaid, cancelBooking } from "../../../../api/bookingsApi";
+import { approveRoom } from "../../../../api/roomsApi";
 
 type BookingItem = {
   id: number;
@@ -49,7 +50,7 @@ type HotelReport = {
 };
 
 function fmtVnd(value: number) {
-  return `${Math.round(value || 0).toLocaleString("vi-VN")} VND`;
+  return `${Math.round(value || 0).toLocaleString("vi-VN")} đ`;
 }
 
 function fmtDate(value: string) {
@@ -97,19 +98,53 @@ function bookingInRange(booking: BookingItem, from: string, to: string) {
   return true;
 }
 
-function SplitMoney({ done, pending }: { done: number; pending: number }) {
+function splitMoney(done: number, pending: number) {
   return (
     <span>
-      <span className="font-semibold">{fmtVnd(done)}</span>
-      <span className="text-muted-foreground"> + </span>
-      <span className="font-semibold text-amber-700">{fmtVnd(pending)}</span>
+      <span className="font-bold text-slate-950">{fmtVnd(done)}</span>
+      {pending > 0 && <span className="ml-1 font-bold text-amber-700">+ {fmtVnd(pending)}</span>}
     </span>
   );
 }
 
+function splitCount(done: number, pending: number) {
+  return (
+    <span>
+      <span className="font-bold text-slate-950">{done}</span>
+      {pending > 0 && <span className="ml-1 font-bold text-amber-700">+ {pending}</span>}
+    </span>
+  );
+}
+
+function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[][] }) {
+  return (
+    <select value={value} onChange={(event) => onChange(event.target.value)} className="h-9 rounded-md border bg-white px-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10">
+      {options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}
+    </select>
+  );
+}
+
+function DateInput({ value, onChange, disabled, title }: { value: string; onChange: (val: string) => void; disabled?: boolean; title?: string }) {
+  return (
+    <div className="relative h-9 rounded-md border bg-white px-2.5 transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
+      {title && <span className="pointer-events-none absolute -top-1.5 left-2 bg-white px-1 text-[9px] font-semibold text-slate-400">{title}</span>}
+      <input
+        type="date"
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-full w-full bg-transparent text-xs outline-none"
+      />
+    </div>
+  );
+}
+
+let bookingReportCache: HotelReport[] | null = null;
+
 export function BookingsTab() {
-  const location = useLocation();
-  const [hotels, setHotels] = useState<HotelReport[]>([]);
+  const { state: locState } = useLocation();
+  const navigate = useNavigate();
+  const [hotels, setHotels] = useState<HotelReport[]>(() => bookingReportCache || []);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [search, setSearch] = useState("");
@@ -122,20 +157,26 @@ export function BookingsTab() {
   const [shouldHighlight, setShouldHighlight] = useState(false);
 
   useEffect(() => {
-    if (location.state?.filter) {
-      if (location.state.filter.from) setDateFrom(location.state.filter.from);
-      if (location.state.filter.to) setDateTo(location.state.filter.to);
+    if (locState?.filter) {
+      if (locState.filter.from) setDateFrom(String(locState.filter.from).slice(0, 10));
+      if (locState.filter.to) setDateTo(String(locState.filter.to).slice(0, 10));
       setTimePreset("custom");
     }
-    if (location.state?.targetId) {
-      setTargetId(location.state.targetId);
+    if (locState?.targetId) {
+      setTargetId(locState.targetId);
       // Auto open modal if we found the hotel
-      const targetHotel = hotels.find(h => h.bookings.some(b => b.id === location.state.targetId));
+      const targetHotel = hotels.find(h => h.bookings.some(b => b.id === locState.targetId));
       if (targetHotel) {
         setDetail(targetHotel);
       }
     }
-    if (location.state?.highlight) {
+    if (locState?.targetPropertyId) {
+      const targetHotel = hotels.find(h => h.propertyId === locState.targetPropertyId);
+      if (targetHotel) {
+        setDetail(targetHotel);
+      }
+    }
+    if (locState?.highlight) {
       setShouldHighlight(true);
       const timer = setTimeout(() => {
         setShouldHighlight(false);
@@ -144,14 +185,17 @@ export function BookingsTab() {
       window.history.replaceState({}, document.title);
       return () => clearTimeout(timer);
     }
-  }, [location.state, hotels]);
+  }, [locState, hotels]);
 
   async function load() {
-    setLoading(true);
+    if (!bookingReportCache || bookingReportCache.length === 0) {
+      setLoading(true);
+    }
     setErr("");
     try {
-      const result = await api("/admin/booking-report");
-      setHotels(result.hotels || []);
+      const result = await fetchBookingReport();
+      bookingReportCache = result.hotels || [];
+      setHotels(bookingReportCache);
     } catch (error: any) {
       setErr(error.message);
     } finally {
@@ -162,7 +206,7 @@ export function BookingsTab() {
   async function approveHotel(propertyId: number, e: React.MouseEvent) {
     e.stopPropagation();
     try {
-      await api(`/admin/rooms/${propertyId}/approve`, { method: "POST" });
+      await approveRoom(propertyId);
       // Optimistic update: chỉ cập nhật hotel đó, không reload toàn bộ
       setHotels((prev) =>
         prev.map((h) =>
@@ -175,6 +219,9 @@ export function BookingsTab() {
   }
 
   useEffect(() => {
+    if (bookingReportCache) {
+      setHotels(bookingReportCache);
+    }
     load().catch(() => {});
   }, []);
 
@@ -189,11 +236,12 @@ export function BookingsTab() {
       const activeBookings = bookings.filter((booking) => booking.status !== "cancelled");
       const sum = (rows: BookingItem[], key: "total" | "partnerPayout" | "platformFee") => rows.reduce((total, item) => total + Number(item[key] || 0), 0);
       
-      const earnedRevenue = sum(activeBookings.filter(b => b.isCompleted), "total");
+      const completed = activeBookings.filter(b => b.isCompleted);
+      const earnedRevenue = sum(completed, "total");
       const grossRevenue = sum(activeBookings, "total");
-      const earnedCommission = sum(activeBookings.filter(b => b.isCompleted), "platformFee");
+      const earnedCommission = sum(completed, "platformFee");
       const grossCommission = sum(activeBookings, "platformFee");
-      const earnedPartnerPayout = sum(activeBookings.filter(b => b.isCompleted), "partnerPayout");
+      const earnedPartnerPayout = sum(completed, "partnerPayout");
       const grossPartnerPayout = sum(activeBookings, "partnerPayout");
 
       return {
@@ -201,6 +249,8 @@ export function BookingsTab() {
         bookings,
         currentStayCount: activeBookings.filter((booking) => booking.isCurrentStay).length,
         totalBookings: activeBookings.length,
+        completedBookingsCount: completed.length,
+        pendingBookingsCount: activeBookings.length - completed.length,
         earnedRevenue,
         pendingRevenue: grossRevenue - earnedRevenue,
         earnedCommission,
@@ -221,14 +271,30 @@ export function BookingsTab() {
       // Luôn hiển thị khách sạn chờ duyệt (isActiveHotel = false)
       return matchSearch && (!isFiltering || hotel.bookings.length > 0 || !hotel.isActiveHotel);
     }).sort((a, b) => {
-      if (a.isActiveHotel === b.isActiveHotel) return 0;
-      return a.isActiveHotel ? -1 : 1;
+      // 1. Ưu tiên có đơn đặt (totalBookings > 0)
+      if (a.totalBookings > 0 && b.totalBookings === 0) return -1;
+      if (b.totalBookings > 0 && a.totalBookings === 0) return 1;
+
+      // Nếu cả hai đều có đơn, sắp xếp theo số đơn giảm dần
+      if (a.totalBookings > 0 && b.totalBookings > 0) {
+        if (b.totalBookings !== a.totalBookings) {
+          return b.totalBookings - a.totalBookings;
+        }
+      }
+
+      // 2. Tiếp theo ưu tiên đã duyệt (isActiveHotel === true) trước chờ duyệt (isActiveHotel === false)
+      if (a.isActiveHotel && !b.isActiveHotel) return -1;
+      if (!a.isActiveHotel && b.isActiveHotel) return 1;
+
+      // 3. Cùng nhóm sắp xếp theo bảng chữ cái tên khách sạn
+      return a.propertyName.localeCompare(b.propertyName);
     });
   }, [hotels, search, timePreset, dateFrom, dateTo, statusFilter]);
 
   const totals = useMemo(() => ({
     currentStay: filtered.reduce((sum, hotel) => sum + hotel.currentStayCount, 0),
-    bookings: filtered.reduce((sum, hotel) => sum + hotel.totalBookings, 0),
+    completedBookings: filtered.reduce((sum, hotel) => sum + hotel.completedBookingsCount, 0),
+    pendingBookings: filtered.reduce((sum, hotel) => sum + hotel.pendingBookingsCount, 0),
     earnedRevenue: filtered.reduce((sum, hotel) => sum + hotel.earnedRevenue, 0),
     pendingRevenue: filtered.reduce((sum, hotel) => sum + hotel.pendingRevenue, 0),
     earnedCommission: filtered.reduce((sum, hotel) => sum + hotel.earnedCommission, 0),
@@ -236,79 +302,64 @@ export function BookingsTab() {
   }), [filtered]);
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Đang lưu trú" value={String(totals.currentStay)} highlight={shouldHighlight && !targetId} />
-        <Stat label="Số lượng đặt phòng" value={String(totals.bookings)} highlight={shouldHighlight && !targetId} />
-        <Stat 
-          label="Doanh thu (Xong + Cho)" 
-          highlight={shouldHighlight && !targetId}
-          value={
-            <div className="flex items-baseline gap-1.5">
-              <span>{fmtVnd(totals.earnedRevenue)}</span>
-              <span className="text-muted-foreground text-sm">+</span>
-              <span className="text-amber-600">{fmtVnd(totals.pendingRevenue)}</span>
-            </div>
-          } 
-        />
-        <Stat 
-          label="Hoa hồng (Xong + Chờ)" 
-          highlight={shouldHighlight && !targetId}
-          value={
-            <div className="flex items-baseline gap-1.5">
-              <span>{fmtVnd(totals.earnedCommission)}</span>
-              <span className="text-muted-foreground text-sm">+</span>
-              <span className="text-amber-600">{fmtVnd(totals.pendingCommission)}</span>
-            </div>
-          } 
-        />
+    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <div>
+        <h2 className="text-lg font-bold tracking-tight text-slate-950">Quản lý đặt phòng</h2>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">Theo dõi lưu trú, đơn đặt phòng, doanh thu và hoa hồng của hệ thống.</p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-end">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-bold">Quản lý đặt phòng</h2>
-          <p className="text-xs text-muted-foreground">
-            Hiển thị: <span className="font-bold">Đã hoàn thành</span> + <span className="font-bold text-amber-600">Sắp tới / Đang lưu trú</span>.
-          </p>
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        <Stat label="Đang lưu trú" value={String(totals.currentStay)} tone="blue" highlight={shouldHighlight && !targetId} />
+        <Stat label="Số đơn" value={splitCount(totals.completedBookings, totals.pendingBookings)} tone="indigo" highlight={shouldHighlight && !targetId} />
+        <Stat label="Doanh thu" value={splitMoney(totals.earnedRevenue, totals.pendingRevenue)} tone="emerald" highlight={shouldHighlight && !targetId} />
+        <Stat label="Hoa hồng" value={splitMoney(totals.earnedCommission, totals.pendingCommission)} tone="amber" highlight={shouldHighlight && !targetId} />
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="grid gap-2 lg:grid-cols-[1fr_160px_160px_140px_140px]">
+          <div className="relative">
+            <svg className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
+            </svg>
+            <input
+              placeholder="Tìm khách sạn, đối tác, thành phố..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="h-9 w-full rounded-md border bg-white pl-8 pr-3 text-xs outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <Select value={timePreset} onChange={setTimePreset} options={[
+            ["all", "Tất cả thời gian"],
+            ["today", "Hôm nay"],
+            ["week", "Tuần này"],
+            ["month", "Tháng này"],
+            ["custom", "Tùy chọn ngày"],
+          ]} />
+          <Select value={statusFilter} onChange={setStatusFilter} options={[
+            ["all", "Tất cả trạng thái"],
+            ["pending", "Chờ thanh toán"],
+            ["current", "Đang lưu trú"],
+            ["upcoming", "Chưa đến"],
+            ["completed", "Đã hoàn thành"],
+            ["cancelled", "Đã hủy"],
+          ]} />
+          <DateInput
+            value={dateFrom}
+            title="Từ ngày nhận phòng"
+            onChange={(val) => {
+              setDateFrom(val);
+              setTimePreset("custom");
+            }}
+          />
+          <DateInput
+            value={dateTo}
+            title="Đến ngày nhận phòng"
+            onChange={(val) => {
+              setDateTo(val);
+              setTimePreset("custom");
+            }}
+          />
         </div>
-        <input
-          placeholder="Tìm kiếm khách sạn, đối tác..."
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="px-3 py-2 border rounded-md text-sm w-full sm:w-80 bg-card outline-none focus:border-primary"
-        />
-      </div>
-
-      <div className="bg-card border rounded-lg p-4 grid gap-4 lg:grid-cols-[1fr_1fr_140px_140px] items-end">
-        <label className="block">
-          <span className="block text-[11px] font-bold uppercase text-muted-foreground mb-1.5">Thời gian</span>
-          <select value={timePreset} onChange={(event) => setTimePreset(event.target.value)} className="w-full px-3 py-2 border rounded-md bg-background text-sm outline-none">
-            <option value="all">Tất cả</option>
-            <option value="today">Hôm nay</option>
-            <option value="week">Tuần này</option>
-            <option value="month">Tháng này</option>
-            <option value="custom">Tùy chọn ngày</option>
-          </select>
-        </label>
-        <label className="block">
-          <span className="block text-[11px] font-bold uppercase text-muted-foreground mb-1.5">Trạng thái</span>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-full px-3 py-2 border rounded-md bg-background text-sm outline-none">
-            <option value="all">Tất cả trạng thái</option>
-            <option value="pending">Chờ thanh toán</option>
-            <option value="current">Đang lưu trú</option>
-            <option value="upcoming">Chưa đến</option>
-            <option value="completed">Đã hoàn thành</option>
-            <option value="cancelled">Đã hủy</option>
-          </select>
-        </label>
-        <label className={`block ${timePreset === "custom" ? "" : "opacity-40"}`}>
-          <span className="block text-[11px] font-bold uppercase text-muted-foreground mb-1.5">Từ ngày</span>
-          <input type="date" disabled={timePreset !== "custom"} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="w-full px-3 py-2 border rounded-md bg-background text-sm outline-none" />
-        </label>
-        <label className={`block ${timePreset === "custom" ? "" : "opacity-40"}`}>
-          <span className="block text-[11px] font-bold uppercase text-muted-foreground mb-1.5">Đến ngày</span>
-          <input type="date" disabled={timePreset !== "custom"} value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="w-full px-3 py-2 border rounded-md bg-background text-sm outline-none" />
-        </label>
       </div>
 
       <div className="bg-card border rounded-lg overflow-hidden max-h-[70vh] overflow-y-auto">
@@ -337,39 +388,39 @@ export function BookingsTab() {
                   key={hotel.propertyId} 
                   onClick={() => setDetail(hotel)} 
                   className={cn(
-                    "cursor-pointer transition-all duration-500",
-                    isTarget ? "animate-highlight-pulse bg-primary/10" : "hover:bg-muted/30",
-                    !hotel.isActiveHotel && "bg-muted/5 opacity-40 grayscale-[0.5]"
+                    "cursor-pointer transition-all duration-500 hover:bg-indigo-50/50",
+                    isTarget ? "animate-highlight-pulse bg-primary/10" : "",
+                    !hotel.isActiveHotel && "bg-slate-50 opacity-75"
                   )}
                 >
-                <td className="px-4 py-4">
-                  <div className="flex items-center gap-2">
-                    <div className={`font-bold ${!hotel.isActiveHotel ? 'text-muted-foreground' : ''}`}>{hotel.propertyName}</div>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="font-bold text-slate-950">{hotel.propertyName}</div>
                     {!hotel.isActiveHotel && (
-                      <span className="text-[9px] bg-orange-600 text-white px-2 py-0.5 rounded font-bold uppercase tracking-wider shadow-sm">Chờ duyệt</span>
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">Chờ duyệt</span>
                     )}
                   </div>
-                  <div className="text-[11px] text-muted-foreground">{hotel.city || hotel.address}</div>
+                  <div className="mt-0.5 text-xs text-slate-500">{hotel.city || hotel.address}</div>
                 </td>
-                <td className="px-4 py-4">
-                  <div className="font-medium text-xs">{hotel.partnerHotelName || "-"}</div>
-                  <div className="text-[10px] text-muted-foreground">{hotel.partnerEmail || "-"}</div>
+                <td className="px-4 py-3">
+                  <div className="font-medium text-xs text-slate-800">{hotel.partnerHotelName || "-"}</div>
+                  <div className="text-[10px] text-slate-500">{hotel.partnerEmail || "-"}</div>
                 </td>
-                <td className="px-4 py-4 text-center">
+                <td className="px-4 py-3 text-center">
                   {hotel.currentStayCount > 0 ? (
-                    <span className="text-blue-600 font-bold">{hotel.currentStayCount} đang ở</span>
+                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">{hotel.currentStayCount} đang ở</span>
                   ) : (
-                    <span className="text-muted-foreground/40">-</span>
+                    <span className="text-slate-300">-</span>
                   )}
                 </td>
-                <td className="px-4 py-4 text-center font-medium">{hotel.totalBookings}</td>
-                <td className="px-4 py-4"><SplitMoney done={hotel.earnedRevenue} pending={hotel.pendingRevenue} /></td>
-                <td className="px-4 py-4 font-bold text-primary"><SplitMoney done={hotel.earnedCommission} pending={hotel.pendingCommission} /></td>
-                <td className="px-4 py-4 text-right">
+                <td className="px-4 py-3 text-center text-sm">{splitCount(hotel.completedBookingsCount, hotel.pendingBookingsCount)}</td>
+                <td className="px-4 py-3 text-sm">{splitMoney(hotel.earnedRevenue, Number(hotel.pendingRevenue || 0))}</td>
+                <td className="px-4 py-3 text-sm">{splitMoney(hotel.earnedCommission, Number(hotel.pendingCommission || 0))}</td>
+                <td className="px-4 py-3 text-right">
                   {!hotel.isActiveHotel && (
                     <button
                       onClick={(e) => approveHotel(hotel.propertyId, e)}
-                      className="px-3 py-1.5 text-[11px] font-bold rounded bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm"
+                      className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-green-600 text-white hover:bg-green-700 transition shadow-sm"
                     >
                       Duyệt
                     </button>
@@ -382,24 +433,41 @@ export function BookingsTab() {
         </table>
       </div>
 
-      {detail && <BookingDetailModal hotel={detail} onClose={() => setDetail(null)} onRefresh={load} />}
+      {detail && (
+        <BookingDetailModal 
+          hotel={detail} 
+          onClose={() => setDetail(null)} 
+          onRefresh={load} 
+          onNavigateToRoom={(propertyId) => navigate("/rooms", { state: { filter: "approved", targetId: propertyId, highlight: true, fromTab: "bookings", fromTargetPropertyId: propertyId } })} 
+        />
+      )}
     </div>
   );
 }
 
-function Stat({ label, value, highlight }: { label: string; value: React.ReactNode; highlight?: boolean }) {
+function Stat({ label, value, tone, highlight }: { label: string; value: React.ReactNode; tone: "slate" | "blue" | "indigo" | "emerald" | "amber"; highlight?: boolean }) {
+  const toneClass = {
+    slate: "border-slate-200 bg-slate-50 text-slate-700",
+    blue: "border-blue-200 bg-blue-50 text-blue-700",
+    indigo: "border-indigo-200 bg-indigo-50 text-indigo-700",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    amber: "border-amber-200 bg-amber-50 text-amber-700",
+  }[tone];
+
   return (
     <div className={cn(
-      "bg-card border rounded-lg p-5 transition-all duration-500",
+      "rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm transition hover:shadow-md duration-500",
       highlight && "animate-highlight-pulse ring-2 ring-primary/20"
     )}>
-      <div className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider mb-2">{label}</div>
-      <div className="text-xl font-bold">{value}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</div>
+      <div className={cn("mt-2 inline-flex rounded border px-2 py-0.5 text-xs font-bold leading-none sm:text-sm", toneClass)}>
+        {value}
+      </div>
     </div>
   );
 }
 
-function BookingDetailModal({ hotel, onClose, onRefresh }: { hotel: HotelReport; onClose: () => void; onRefresh: () => void }) {
+function BookingDetailModal({ hotel, onClose, onRefresh, onNavigateToRoom }: { hotel: HotelReport; onClose: () => void; onRefresh: () => void; onNavigateToRoom?: (hotelId: number) => void }) {
   const [selectedSingle, setSelectedSingle] = useState<BookingItem | null>(null);
   const [activeTab, setActiveTab] = useState<"upcoming" | "completed" | "cancelled">("upcoming");
 
@@ -414,15 +482,25 @@ function BookingDetailModal({ hotel, onClose, onRefresh }: { hotel: HotelReport;
     <div className="fixed inset-0 bg-black/50 z-[80] flex items-start justify-center p-4 pt-10 overflow-y-auto" onClick={onClose}>
       <div className="bg-card border rounded-lg w-full max-w-6xl max-h-[85vh] overflow-hidden flex flex-col shadow-xl" onClick={(event) => event.stopPropagation()}>
         <div className="p-6 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h3 className="text-xl font-bold">{hotel.propertyName}</h3>
-              <span className="text-[10px] bg-muted px-2 py-0.5 rounded font-bold uppercase">ID: {hotel.propertyId}</span>
+          <div className="space-y-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-xl font-bold truncate">{hotel.propertyName}</h3>
+              <span className="text-[10px] bg-muted px-2 py-0.5 rounded font-bold uppercase shrink-0">ID: {hotel.propertyId}</span>
             </div>
-            <p className="text-xs text-muted-foreground">{hotel.address} | Đối tác: {hotel.partnerEmail}</p>
+            <p className="text-xs text-muted-foreground truncate">{hotel.address} | Đối tác: {hotel.partnerEmail}</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex border rounded-md overflow-hidden">
+          <div className="flex items-center gap-3 shrink-0">
+            {onNavigateToRoom && (
+              <button
+                onClick={() => onNavigateToRoom(hotel.propertyId)}
+                className="px-3 py-1.5 bg-primary text-primary-foreground font-semibold rounded-md text-xs hover:opacity-90 transition-opacity cursor-pointer shadow-sm flex items-center gap-1.5 whitespace-nowrap"
+                title="Chuyển sang trang Quản lý phòng chi tiết"
+              >
+                <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                Chi tiết phòng
+              </button>
+            )}
+            <div className="flex border rounded-md overflow-hidden bg-background">
               {(["upcoming", "completed", "cancelled"] as const).map(tab => (
                 <button
                   key={tab}
@@ -458,22 +536,22 @@ function BookingDetailModal({ hotel, onClose, onRefresh }: { hotel: HotelReport;
               {filteredBookings.map((booking) => {
                 return (
                 <tr key={booking.id} onClick={() => setSelectedSingle(booking)} className="cursor-pointer hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-4 font-bold text-xs uppercase">{booking.bookingCode}</td>
-                  <td className="px-4 py-4">
+                  <td className="p-4 font-bold text-xs uppercase">{booking.bookingCode}</td>
+                  <td className="p-4">
                     <div className="font-bold">{booking.customerName}</div>
                     <div className="text-[10px] text-muted-foreground">{booking.customerEmail}</div>
                   </td>
-                  <td className="px-4 py-4 text-xs font-medium">
+                  <td className="p-4 text-xs font-medium">
                     {booking.bookingCode === "BKMOMZT2FUAB17A6" ? "Deluxe Room" : (
                       booking.priceLabel || 
                       "-"
                     )}
                   </td>
-                  <td className="px-4 py-4 text-center">
+                  <td className="p-4 text-center">
                     <div className="font-bold text-xs">{fmtDate(booking.checkInDate)} - {fmtDate(booking.checkOutDate)}</div>
                     <div className="text-[10px] text-muted-foreground">{booking.nights} đêm</div>
                   </td>
-                  <td className="px-4 py-4">
+                  <td className="p-4">
                     <div className="flex flex-col items-center gap-1">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
                         booking.status === "pending" ? "text-amber-600 border-amber-200 bg-amber-50" : 
@@ -489,7 +567,7 @@ function BookingDetailModal({ hotel, onClose, onRefresh }: { hotel: HotelReport;
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-right font-bold text-primary">{fmtVnd(booking.platformFee)}</td>
+                  <td className="p-4 text-right font-bold text-primary">{fmtVnd(booking.platformFee)}</td>
                 </tr>
                 );
               })}
@@ -533,9 +611,9 @@ function SingleBookingDetailModal({ booking, onClose, onRefresh }: { booking: Bo
     setLoading(true);
     try {
       if (action === 'confirm_payment') {
-        await api(`/admin/bookings/${booking.id}/mark-paid`, { method: 'POST' });
+        await markBookingPaid(booking.id);
       } else if (action === 'cancel') {
-        await api(`/admin/bookings/${booking.id}/cancel`, { method: 'POST' });
+        await cancelBooking(booking.id);
       }
       onRefresh();
       onClose();

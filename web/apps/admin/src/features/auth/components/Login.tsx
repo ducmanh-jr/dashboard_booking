@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { api } from "@nowayhome/api-client";
+import { login } from "../../../api/authApi";
 import { AuthLayout, GoogleButton } from "@nowayhome/auth-ui";
 import { User } from "../../../shared/types";
 
@@ -17,7 +17,7 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
     setErr("");
     setLoading(true);
     try {
-      const result = await api("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      const result = await login({ email, password });
       if (result.user?.role !== "admin") throw new Error("Tai khoan nay khong phai admin");
       onLogin(result.user);
     } catch (error: any) {

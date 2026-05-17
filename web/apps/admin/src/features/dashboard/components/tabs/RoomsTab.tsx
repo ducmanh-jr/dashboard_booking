@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { api } from "@nowayhome/api-client";
+import { useLocation, useNavigate } from "react-router-dom";
+import { fetchRooms, approveRoom, updateRoom, approveRoomRequest, rejectRoomRequest, rejectRoom, deleteRoom } from "../../../../api/roomsApi";
 import { Room, RoomChangeRequest, Price, NearbyPlace, TransportConnection } from "@/shared/types";
+import { cn } from "@/shared/components/ui";
 import { RoomEditModal } from "../modals/RoomEditModal";
 
 function fmtVnd(value: number) {
@@ -103,13 +105,48 @@ function RequestPayloadPreview({ request }: { request: RoomChangeRequest | null 
   );
 }
 
+const roomCache: Record<string, Room[]> = {};
+
 export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string }) {
-  const [filter, setFilter] = useState(initialFilter);
-  const [list, setList] = useState<Room[]>([]);
+  const locState = useLocation().state as any;
+  const navigate = useNavigate();
+  const startingFilter = locState?.filter || initialFilter;
+  const [filter, setFilter] = useState(startingFilter);
+  const [targetId, setTargetId] = useState<number | null>(locState?.targetId || null);
+  const [shouldHighlight, setShouldHighlight] = useState(Boolean(locState?.highlight));
+
+  const [list, setList] = useState<Room[]>(() => roomCache[startingFilter] || []);
+  const [detail, setDetail] = useState<Room | null>(() => {
+    if (locState?.targetId && roomCache[startingFilter]) {
+      return roomCache[startingFilter].find(r => Number(r.id) === Number(locState.targetId)) || null;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (locState?.targetId && locState?.highlight) {
+      setShouldHighlight(true);
+      const timer = setTimeout(() => {
+        setShouldHighlight(false);
+        setTargetId(null);
+      }, 3000);
+      window.history.replaceState({}, document.title);
+      return () => clearTimeout(timer);
+    }
+  }, [locState]);
+
+  useEffect(() => {
+    if (targetId && list.length > 0 && !detail) {
+      const targetRoom = list.find((r) => Number(r.id) === Number(targetId));
+      if (targetRoom) {
+        setDetail(targetRoom);
+      }
+    }
+  }, [targetId, list, detail]);
+
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [reject, setReject] = useState<{ id: number; reason: string; requestId?: number } | null>(null);
-  const [detail, setDetail] = useState<Room | null>(null);
   const [editing, setEditing] = useState<Room | null>(null);
   const [selectedRoomPrice, setSelectedRoomPrice] = useState<Price | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -121,7 +158,7 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
     let result = [...list];
     if (search) {
       const q = search.toLowerCase();
-      result = result.filter(r => r.name.toLowerCase().includes(q) || (r.partnerHotelName || "").toLowerCase().includes(q) || (r.partnerEmail || "").toLowerCase().includes(q));
+      result = result.filter(r => (r.name || "").toLowerCase().includes(q) || (r.partnerHotelName || "").toLowerCase().includes(q) || (r.partnerEmail || "").toLowerCase().includes(q));
     }
     if (sortConfig) {
       result.sort((a, b) => {
@@ -156,17 +193,18 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
     setSortConfig({ key, direction });
   }
 
-  function SortIcon({ columnKey }: { columnKey: string }) {
-    if (sortConfig?.key !== columnKey) return null;
-    return <span className="ml-1 text-primary text-[10px]">{sortConfig.direction === "asc" ? "(Tăng)" : "(Giảm)"}</span>;
-  }
+
 
   async function load() {
-    setLoading(true);
+    if (!roomCache[filter] || roomCache[filter].length === 0) {
+      setLoading(true);
+    }
     setErr("");
     try {
-      const result = await api(`/admin/rooms?status=${filter}&limit=1000`);
-      setList(result.rooms);
+      const result = await fetchRooms(filter);
+      const rooms = result.rooms || [];
+      roomCache[filter] = rooms;
+      setList(rooms);
     } catch (error: any) {
       setErr(error.message);
     } finally {
@@ -175,15 +213,18 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
   }
 
   useEffect(() => {
+    if (roomCache[filter]) {
+      setList(roomCache[filter]);
+    }
     load();
   }, [filter]);
 
   async function approve(room: Room) {
     try {
       if (room.pendingRequest) {
-        await api(`/admin/room-change-requests/${room.pendingRequest.id}/approve`, { method: "POST" });
+        await approveRoomRequest(room.pendingRequest.id);
       } else {
-        await api(`/admin/rooms/${room.id}/approve`, { method: "POST" });
+        await approveRoom(room.id);
       }
       await load();
       setDetail(null);
@@ -196,9 +237,9 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
     if (!reject) return;
     try {
       if (reject.requestId) {
-        await api(`/admin/room-change-requests/${reject.requestId}/reject`, { method: "POST", body: JSON.stringify({ reason: reject.reason }) });
+        await rejectRoomRequest(reject.requestId, reject.reason);
       } else {
-        await api(`/admin/rooms/${reject.id}/reject`, { method: "POST", body: JSON.stringify({ reason: reject.reason }) });
+        await rejectRoom(reject.id, reject.reason);
       }
       setReject(null);
       await load();
@@ -215,11 +256,20 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
     }
     if (!confirm(`Xóa khách sạn "${room.name}"?`)) return;
     try {
-      await api(`/admin/rooms/${room.id}`, { method: "DELETE" });
+      await deleteRoom(room.id);
       await load();
       setDetail(null);
     } catch (error: any) {
       alert(error.message);
+    }
+  }
+
+  function handleFilterChange(newFilter: string) {
+    setFilter(newFilter);
+    if (roomCache[newFilter]) {
+      setList(roomCache[newFilter]);
+    } else {
+      setList([]);
     }
   }
 
@@ -228,54 +278,57 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
       <div className="flex flex-col sm:flex-row gap-3 justify-between">
         <div className="flex gap-2">
           {[["pending", "Chờ duyệt"], ["approved", "Đã duyệt"], ["rejected", "Đã từ chối"]].map(([key, label]) => (
-            <button key={key} onClick={() => setFilter(key)} className={`px-4 py-2 rounded-md text-sm border ${filter === key ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-accent"}`}>
+            <button key={key} onClick={() => handleFilterChange(key)} className={`px-4 py-2 rounded-md text-sm border ${filter === key ? "bg-primary text-primary-foreground border-primary font-semibold shadow-sm" : "bg-card hover:bg-accent text-muted-foreground"}`}>
               {label}
             </button>
           ))}
         </div>
-        <input
-          placeholder="Tìm khách sạn (Tên, Đối tác, Email)..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="px-4 py-2 border rounded-md text-sm w-full sm:w-80 bg-card"
-        />
+        <form onSubmit={e => { e.preventDefault(); e.currentTarget.querySelector('input')?.blur(); }} className="relative w-full sm:w-80">
+          <input
+            placeholder="Tìm khách sạn (Tên, Đối tác, Email)..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="px-4 py-2 border rounded-md text-sm w-full bg-card focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+          />
+        </form>
       </div>
       {err && <div className="text-sm text-destructive">{err}</div>}
 
-      {loading ? (
-        <div className="text-muted-foreground">Đang tải...</div>
-      ) : (
-        <div className="bg-card border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted text-left sticky top-0 z-10">
+      <div className={`bg-card border rounded-lg overflow-hidden transition-opacity duration-200 ${loading && filteredList.length > 0 ? "opacity-60" : ""}`}>
+        <table className="w-full text-sm">
+          <thead className="bg-muted text-left sticky top-0 z-10">
+            <tr>
+              <th className="px-4 py-2.5 cursor-pointer hover:bg-accent select-none" onClick={() => requestSort('name')}>Khách sạn <SortIcon columnKey="name" sortConfig={sortConfig} /></th>
+              <th className="px-4 py-2.5 cursor-pointer hover:bg-accent select-none" onClick={() => requestSort('partnerHotelName')}>Đối tác <SortIcon columnKey="partnerHotelName" sortConfig={sortConfig} /></th>
+              <th className="px-4 py-2.5 cursor-pointer hover:bg-accent select-none" onClick={() => requestSort('roomType')}>Hạng sao <SortIcon columnKey="roomType" sortConfig={sortConfig} /></th>
+              <th className="px-4 py-2.5 cursor-pointer hover:bg-accent select-none" onClick={() => requestSort('minPrice')}>Giá thấp nhất <SortIcon columnKey="minPrice" sortConfig={sortConfig} /></th>
+              <th className="px-4 py-2.5 cursor-pointer hover:bg-accent select-none" onClick={() => requestSort('createdAt')}>Ngày tạo <SortIcon columnKey="createdAt" sortConfig={sortConfig} /></th>
+              <th className="px-4 py-3">Trạng thái</th>
+              <th className="px-4 py-2.5 text-right">Hành động</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && filteredList.length === 0 ? (
               <tr>
-                <th className="px-4 py-2.5 cursor-pointer hover:bg-accent select-none" onClick={() => requestSort('name')}>Khách sạn <SortIcon columnKey="name" /></th>
-                <th className="px-4 py-2.5 cursor-pointer hover:bg-accent select-none" onClick={() => requestSort('partnerHotelName')}>Đối tác <SortIcon columnKey="partnerHotelName" /></th>
-                <th className="px-4 py-2.5 cursor-pointer hover:bg-accent select-none" onClick={() => requestSort('roomType')}>Hạng sao <SortIcon columnKey="roomType" /></th>
-                <th className="px-4 py-2.5 cursor-pointer hover:bg-accent select-none" onClick={() => requestSort('minPrice')}>Giá thấp nhất <SortIcon columnKey="minPrice" /></th>
-                <th className="px-4 py-2.5 cursor-pointer hover:bg-accent select-none" onClick={() => requestSort('createdAt')}>Ngày tạo <SortIcon columnKey="createdAt" /></th>
-                <th className="px-4 py-3">Trạng thái</th>
-                <th className="px-4 py-2.5 text-right">Hành động</th>
+                <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground font-medium">Đang tải dữ liệu...</td>
               </tr>
-            </thead>
-            <tbody>
-              {filteredList.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Không có dữ liệu</td>
-                </tr>
-              )}
-              {filteredList.map((room) => {
+            ) : filteredList.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground font-medium">Không có dữ liệu</td>
+              </tr>
+            ) : (
+              filteredList.map((room) => {
                 const minPrice = room.prices.length ? Math.min(...room.prices.map(p => p.pricePerNight)) : 0;
                 return (
-                  <tr key={room.id} className="border-t">
+                  <tr key={room.id} className="border-t hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-3 font-medium">{room.name}</td>
                     <td className="px-4 py-3">
                       <div>{room.partnerHotelName || "-"}</div>
                       <div className="text-[10px] text-muted-foreground">{room.partnerEmail}</div>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">{room.roomType.includes("sao") ? room.roomType : `${room.roomType} sao`}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{String(room.roomType || "").includes("sao") ? room.roomType : `${room.roomType || "0"} sao`}</td>
                     <td className="px-4 py-3">{fmtVnd(minPrice)}</td>
-                    <td className="px-4 py-3">{new Date(room.createdAt).toLocaleString("vi-VN")}</td>
+                    <td className="px-4 py-3" suppressHydrationWarning>{new Date(room.createdAt).toLocaleString("vi-VN")}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase w-fit ${room.status === "approved" ? "bg-green-100 text-green-700" : room.status === "rejected" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
@@ -289,36 +342,52 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
                       </div>
                     </td>
                     <td className="px-4 py-3 space-x-1 whitespace-nowrap text-right">
-                      <button onClick={() => setDetail(room)} className="px-2 py-1 text-xs rounded border hover:bg-accent">Chi tiết</button>
+                      <button onClick={() => setDetail(room)} className="px-2 py-1 text-xs rounded border hover:bg-accent font-medium">Chi tiết</button>
                       {filter === "pending" && (
                         <>
-                          <button onClick={() => approve(room)} className="px-2 py-1 text-xs rounded bg-primary text-primary-foreground font-medium">Duyệt</button>
-                          <button onClick={() => setReject({ id: room.id, requestId: room.pendingRequest?.id, reason: "" })} className="px-2 py-1 text-xs rounded bg-destructive text-destructive-foreground font-medium">Từ chối</button>
+                          <button onClick={() => approve(room)} className="px-2 py-1 text-xs rounded bg-primary text-primary-foreground font-medium hover:opacity-90">Duyệt</button>
+                          <button onClick={() => setReject({ id: room.id, requestId: room.pendingRequest?.id, reason: "" })} className="px-2 py-1 text-xs rounded bg-destructive text-destructive-foreground font-medium hover:opacity-90">Từ chối</button>
                         </>
                       )}
                       <button onClick={() => removeRoom(room)} className="px-2 py-1 text-xs rounded bg-destructive/10 text-destructive hover:bg-destructive hover:text-white">Xóa</button>
                     </td>
                   </tr>
                 );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
 
       {detail && (
         <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 pt-10 z-[60] overflow-y-auto" onClick={() => setDetail(null)}>
-          <div className="bg-card border rounded-lg w-full max-w-6xl my-8 flex flex-col h-[85vh] overflow-hidden shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <div className="p-6 border-b shrink-0 flex items-start justify-between bg-background/50 backdrop-blur-sm">
-              <div>
-                <h3 className="text-xl font-bold text-primary">{detail.name}</h3>
-                <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
-                  <span>{detail.city || detail.partnerHotelName}</span>
-                  <span>•</span>
-                  <span>{detail.roomType.includes("sao") ? detail.roomType : `${detail.roomType} sao`}</span>
+          <div className={`bg-card border rounded-lg w-full max-w-6xl my-8 flex flex-col h-[85vh] overflow-hidden shadow-2xl transition-all duration-300 ${shouldHighlight ? "ring-4 ring-primary/40 shadow-[0_0_30px_rgba(var(--primary-rgb),0.3)]" : ""}`} onClick={(event) => event.stopPropagation()}>
+            <div className="p-6 border-b shrink-0 flex items-start justify-between bg-background/50 backdrop-blur-sm gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                    <button
+                      onClick={() => {
+                        if (locState?.fromTab) {
+                          navigate(`/${locState.fromTab}`, { state: { targetPropertyId: locState.fromTargetPropertyId } });
+                        } else {
+                          navigate(-1);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-zinc-700 text-xs font-bold transition-all shrink-0 cursor-pointer shadow-sm bg-white"
+                      title="Quay lại"
+                    >
+                      <svg className="size-4.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                      Quay lại
+                    </button>
+                <div className="min-w-0">
+                  <h3 className="text-xl font-bold text-primary truncate">{detail.name}</h3>
+                  <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1 flex-wrap">
+                    <span>{detail.city || detail.partnerHotelName || "Hà Nội"}</span>
+                    <span>•</span>
+                    <span>{String(detail.roomType || "").includes("sao") ? detail.roomType : `${detail.roomType || "0"} sao`}</span>
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 shrink-0">
                 {!detail.pendingRequest && (
                   <>
                     <button onClick={() => { setEditing(detail); setDetail(null); }} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted">Sửa</button>
@@ -642,7 +711,7 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
         <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 pt-10 z-[70] overflow-y-auto" onClick={() => setReject(null)}>
           <div className="bg-card border rounded-lg p-5 w-full max-w-md" onClick={(event) => event.stopPropagation()}>
             <h3 className="font-semibold mb-2">Lý do từ chối</h3>
-            <textarea className="w-full border rounded-md p-2 bg-background" rows={4} value={reject.reason} onChange={(event) => setReject({ ...reject, reason: event.target.value })} />
+            <textarea className="w-full border rounded-md p-2 bg-background" rows={4} value={reject.reason} onChange={(event) => setReject(prev => prev ? ({ ...prev, reason: event.target.value }) : null)} />
             <div className="flex justify-end gap-2 mt-3">
               <button onClick={() => setReject(null)} className="px-3 py-1.5 rounded-md border">Hủy</button>
               <button onClick={doReject} className="px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground">Xác nhận từ chối</button>
@@ -663,6 +732,11 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
       )}
     </div>
   );
+}
+
+function SortIcon({ columnKey, sortConfig }: { columnKey: string, sortConfig: { key: string, direction: "asc" | "desc" } | null }) {
+  if (sortConfig?.key !== columnKey) return null;
+  return <span className="ml-1 text-primary text-[10px]">{sortConfig.direction === "asc" ? "(Tăng)" : "(Giảm)"}</span>;
 }
 
 

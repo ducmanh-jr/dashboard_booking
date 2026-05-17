@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "@nowayhome/api-client";
+import { fetchBookingReport, runBookingAction } from "../../../../api/bookingsApi";
+
 
 type BookingItem = {
   id: number;
@@ -137,6 +138,15 @@ function splitMoney(done: number, pending: number) {
   );
 }
 
+function splitCount(done: number, pending: number) {
+  return (
+    <span>
+      <span className="font-bold text-slate-950">{done}</span>
+      {pending > 0 && <span className="ml-1 font-bold text-amber-700">+ {pending}</span>}
+    </span>
+  );
+}
+
 export function BookingsTab() {
   const [hotels, setHotels] = useState<HotelReport[]>(cachedBookingHotels || []);
   const [loading, setLoading] = useState(!cachedBookingHotels);
@@ -152,7 +162,7 @@ export function BookingsTab() {
     setLoading(hotels.length === 0);
     setErr("");
     try {
-      const result = await api("/partner/booking-report");
+      const result = await fetchBookingReport();
       const nextHotels = result.hotels || [];
       cachedBookingHotels = nextHotels;
       setHotels(nextHotels);
@@ -190,6 +200,8 @@ export function BookingsTab() {
           bookings,
           currentStayCount: activeBookings.filter((booking) => booking.isCurrentStay).length,
           totalBookings: activeBookings.length,
+          completedBookingsCount: completed.length,
+          pendingBookingsCount: activeBookings.length - completed.length,
           earnedRevenue,
           pendingRevenue: grossRevenue - earnedRevenue,
           earnedPartnerPayout,
@@ -199,6 +211,25 @@ export function BookingsTab() {
       .filter((hotel) => {
         const matchSearch = !q || [hotel.propertyName, hotel.city || "", hotel.address].some((value) => value.toLowerCase().includes(q));
         return matchSearch && (statusFilter === "all" || hotel.bookings.length > 0);
+      })
+      .sort((a, b) => {
+        // 1. Ưu tiên có đơn đặt (totalBookings > 0)
+        if (a.totalBookings > 0 && b.totalBookings === 0) return -1;
+        if (b.totalBookings > 0 && a.totalBookings === 0) return 1;
+
+        // Nếu cả hai đều có đơn, sắp xếp theo số đơn giảm dần
+        if (a.totalBookings > 0 && b.totalBookings > 0) {
+          if (b.totalBookings !== a.totalBookings) {
+            return b.totalBookings - a.totalBookings;
+          }
+        }
+
+        // 2. Tiếp theo ưu tiên đã duyệt (isActiveHotel === true) trước chờ duyệt (isActiveHotel === false)
+        if (a.isActiveHotel && !b.isActiveHotel) return -1;
+        if (!a.isActiveHotel && b.isActiveHotel) return 1;
+
+        // 3. Cùng nhóm sắp xếp theo bảng chữ cái tên khách sạn
+        return a.propertyName.localeCompare(b.propertyName);
       });
   }, [hotels, search, timePreset, dateFrom, dateTo, statusFilter]);
 
@@ -206,7 +237,8 @@ export function BookingsTab() {
     () => ({
       activeHotels: filtered.filter((hotel) => hotel.isActiveHotel).length,
       currentStay: filtered.reduce((sum, hotel) => sum + hotel.currentStayCount, 0),
-      bookings: filtered.reduce((sum, hotel) => sum + hotel.totalBookings, 0),
+      completedBookings: filtered.reduce((sum, hotel) => sum + hotel.completedBookingsCount, 0),
+      pendingBookings: filtered.reduce((sum, hotel) => sum + hotel.pendingBookingsCount, 0),
       earnedPartnerPayout: filtered.reduce((sum, hotel) => sum + hotel.earnedPartnerPayout, 0),
       pendingPartnerPayout: filtered.reduce((sum, hotel) => sum + Number(hotel.pendingPartnerPayout || 0), 0),
     }),
@@ -226,42 +258,30 @@ export function BookingsTab() {
   }
 
   return (
-    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-950">Đặt phòng & doanh thu</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Theo dõi lưu trú, đơn đặt phòng và khoản tiền đối tác nhận được.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => load()}
-          className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3.5 py-2 text-[13px] font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v6h6M20 20v-6h-6M20 9a8 8 0 0 0-13.6-3.6L4 8m16 8-2.4 2.6A8 8 0 0 1 4 15" />
-          </svg>
-          Làm mới
-        </button>
+    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <div>
+        <h2 className="text-lg font-bold tracking-tight text-slate-950">Đặt phòng & doanh thu</h2>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">Theo dõi lưu trú, đơn đặt phòng và khoản tiền đối tác nhận được.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <StatCard label="Khách sạn hoạt động" value={String(totals.activeHotels)} tone="slate" />
         <StatCard label="Đang lưu trú" value={String(totals.currentStay)} tone="blue" />
-        <StatCard label="Số đơn" value={String(totals.bookings)} tone="indigo" />
+        <StatCard label="Số đơn" value={splitCount(totals.completedBookings, totals.pendingBookings)} tone="indigo" />
         <StatCard label="Thu nhập" value={splitMoney(totals.earnedPartnerPayout, totals.pendingPartnerPayout)} tone="emerald" />
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-[1fr_160px_160px_140px_140px]">
+      <div className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="grid gap-2 lg:grid-cols-[1fr_160px_160px_140px_140px]">
           <div className="relative">
-            <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
             </svg>
             <input
               placeholder="Tìm khách sạn, thành phố, địa chỉ..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="h-10 w-full rounded-md border bg-white pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+              className="h-9 w-full rounded-md border bg-white pl-8 pr-3 text-xs outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
             />
           </div>
           <Select value={timePreset} onChange={setTimePreset} options={[
@@ -279,8 +299,24 @@ export function BookingsTab() {
             ["completed", "Hoàn thành"],
             ["cancelled", "Đã hủy"],
           ]} />
-          <DateInput value={dateFrom} disabled={timePreset !== "custom"} onChange={setDateFrom} />
-          <DateInput value={dateTo} disabled={timePreset !== "custom"} onChange={setDateTo} />
+          <DateInput
+            value={dateFrom}
+            disabled={false}
+            title="Từ ngày nhận phòng"
+            onChange={(val) => {
+              setDateFrom(val);
+              setTimePreset("custom");
+            }}
+          />
+          <DateInput
+            value={dateTo}
+            disabled={false}
+            title="Đến ngày nhận phòng"
+            onChange={(val) => {
+              setDateTo(val);
+              setTimePreset("custom");
+            }}
+          />
         </div>
       </div>
 
@@ -330,7 +366,7 @@ export function BookingsTab() {
                       <span className="text-slate-300">-</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-center font-bold text-slate-800">{hotel.totalBookings}</td>
+                  <td className="px-4 py-3 text-center text-sm">{splitCount(hotel.completedBookingsCount, hotel.pendingBookingsCount)}</td>
                   <td className="px-4 py-3 text-sm">{splitMoney(hotel.earnedRevenue, Number(hotel.pendingRevenue || 0))}</td>
                   <td className="px-4 py-3 text-sm">{splitMoney(hotel.earnedPartnerPayout, Number(hotel.pendingPartnerPayout || 0))}</td>
                 </tr>
@@ -354,29 +390,30 @@ function StatCard({ label, value, tone }: { label: string; value: React.ReactNod
   }[tone];
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="text-[13px] font-medium text-slate-600">{label}</div>
-      <div className={cn("mt-3 inline-flex rounded-md border px-2.5 py-1 text-lg font-bold leading-none", toneClass)}>{value}</div>
+    <div className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm transition hover:shadow-md">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</div>
+      <div className={cn("mt-2 inline-flex rounded border px-2 py-0.5 text-xs font-bold leading-none sm:text-sm", toneClass)}>{value}</div>
     </div>
   );
 }
 
 function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[][] }) {
   return (
-    <select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10">
+    <select value={value} onChange={(event) => onChange(event.target.value)} className="h-9 rounded-md border bg-white px-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10">
       {options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}
     </select>
   );
 }
 
-function DateInput({ value, disabled, onChange }: { value: string; disabled: boolean; onChange: (value: string) => void }) {
+function DateInput({ value, disabled, onChange, title }: { value: string; disabled: boolean; onChange: (value: string) => void; title?: string }) {
   return (
     <input
       type="date"
       disabled={disabled}
       value={value}
+      title={title}
       onChange={(event) => onChange(event.target.value)}
-      className="h-10 rounded-md border bg-white px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10 disabled:bg-slate-50 disabled:text-slate-300"
+      className="h-9 rounded-md border bg-white px-2.5 text-xs outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10 disabled:bg-slate-50 disabled:text-slate-300"
     />
   );
 }
@@ -498,7 +535,7 @@ function SingleBookingDetailModal({ booking, onClose, onChanged }: { booking: Bo
     setBusyAction(action);
     setErr("");
     try {
-      await api(`/partner/bookings/${booking.id}/${action}`, { method: "POST" });
+      await runBookingAction(booking.id, action);
       onChanged();
     } catch (error: any) {
       setErr(error.message || "Không cập nhật được trạng thái booking");

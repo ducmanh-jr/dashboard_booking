@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "@nowayhome/api-client";
+import { updateRoom } from "../../../../api/roomsApi";
 import { Room, ROOM_TYPES, IMAGE_LABELS, Price } from "@/shared/types";
 
 function buildEditableRoom(room: Room) {
@@ -132,28 +132,34 @@ export function RoomEditModal({
   const [saving, setSaving] = useState(false);
 
   function updatePrice(index: number, key: keyof typeof form.prices[0], value: string) {
-    const next = [...form.prices];
-    next[index] = { ...next[index], [key]: value } as typeof form.prices[0];
-    setForm({ ...form, prices: next });
+    setForm(prev => {
+      const next = [...prev.prices];
+      next[index] = { ...next[index], [key]: value } as typeof prev.prices[0];
+      return { ...prev, prices: next };
+    });
   }
 
   function updateNearby(index: number, key: "name" | "type" | "distanceM" | "lat" | "lon", value: string) {
-    const next = [...form.nearbyPlaces];
-    next[index] = { ...next[index], [key]: value };
-    setForm({ ...form, nearbyPlaces: next });
+    setForm(prev => {
+      const next = [...prev.nearbyPlaces];
+      next[index] = { ...next[index], [key]: value };
+      return { ...prev, nearbyPlaces: next };
+    });
   }
 
   function updateHotelImage(index: number, key: "url" | "category" | "caption", value: string) {
-    const next = [...form.images];
-    next[index] = { ...next[index], [key]: value };
-    setForm({ ...form, images: next });
+    setForm(prev => {
+      const next = [...prev.images];
+      next[index] = { ...next[index], [key]: value };
+      return { ...prev, images: next };
+    });
   }
 
   async function save() {
     setErr("");
     setSaving(true);
     try {
-      await api(`/admin/rooms/${room.id}`, { method: "PATCH", body: JSON.stringify(buildRoomPayload(form)) });
+      await updateRoom(room.id, buildRoomPayload(form));
       await onSaved();
       onClose();
     } catch (error: any) {
@@ -164,8 +170,18 @@ export function RoomEditModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 pt-10 z-50 overflow-y-auto" onClick={onClose}>
-      <div className="bg-card border rounded-lg p-5 w-full max-w-4xl space-y-4 my-8" onClick={(event) => event.stopPropagation()}>
+    <div 
+      className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 pt-10 z-50 overflow-y-auto" 
+      onClick={onClose}
+      role="button"
+      tabIndex={-1}
+      onKeyDown={(e) => e.key === "Escape" && onClose()}
+    >
+      <div 
+        className="bg-card border rounded-lg p-5 w-full max-w-4xl space-y-4 my-8" 
+        onClick={(event: any) => event.stopPropagation()}
+        role="presentation"
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-lg">Sửa khách sạn</h3>
@@ -176,13 +192,13 @@ export function RoomEditModal({
         <div className="grid md:grid-cols-2 gap-4">
           <label className="text-sm">
             <div className="font-medium mb-1">Tên khách sạn</div>
-            <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="w-full px-3 py-2 border rounded-md bg-background" />
+            <input value={form.name} onChange={(event: any) => setForm(prev => ({ ...prev, name: event.target.value }))} className="w-full px-3 py-2 border rounded-md bg-background" />
           </label>
           <label className="text-sm">
             <div className="font-medium mb-1">Hạng sao</div>
             <select
               value={form.roomType}
-              onChange={(event) => setForm({ ...form, roomType: event.target.value })}
+              onChange={(event: any) => setForm(prev => ({ ...prev, roomType: event.target.value }))}
               className="w-full px-3 py-2 border rounded-md bg-background"
             >
               {ROOM_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -190,47 +206,47 @@ export function RoomEditModal({
           </label>
           <label className="text-sm md:col-span-2">
             <div className="font-medium mb-1">Mô tả</div>
-            <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={3} className="w-full px-3 py-2 border rounded-md bg-background" />
+            <textarea value={form.description} onChange={(event: any) => setForm(prev => ({ ...prev, description: event.target.value }))} rows={3} className="w-full px-3 py-2 border rounded-md bg-background" />
           </label>
           <label className="text-sm md:col-span-2">
             <div className="font-medium mb-1">Địa chỉ</div>
-            <input value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} className="w-full px-3 py-2 border rounded-md bg-background" />
+            <input value={form.address} onChange={(event: any) => setForm(prev => ({ ...prev, address: event.target.value }))} className="w-full px-3 py-2 border rounded-md bg-background" />
           </label>
           <label className="text-sm">
             <div className="font-medium mb-1">Thành phố</div>
-            <input value={form.city} onChange={(event) => setForm({ ...form, city: event.target.value })} className="w-full px-3 py-2 border rounded-md bg-background" />
+            <input value={form.city} onChange={(event: any) => setForm(prev => ({ ...prev, city: event.target.value }))} className="w-full px-3 py-2 border rounded-md bg-background" />
           </label>
           <label className="text-sm">
             <div className="font-medium mb-1">Sức chứa</div>
-            <input type="number" value={form.capacity} onChange={(event) => setForm({ ...form, capacity: event.target.value })} className="w-full px-3 py-2 border rounded-md bg-background" />
+            <input type="number" value={form.capacity} onChange={(event: any) => setForm(prev => ({ ...prev, capacity: event.target.value }))} className="w-full px-3 py-2 border rounded-md bg-background" />
           </label>
           <label className="text-sm">
             <div className="font-medium mb-1">Diện tích</div>
-            <input type="number" value={form.area} onChange={(event) => setForm({ ...form, area: event.target.value })} className="w-full px-3 py-2 border rounded-md bg-background" />
+            <input type="number" value={form.area} onChange={(event: any) => setForm(prev => ({ ...prev, area: event.target.value }))} className="w-full px-3 py-2 border rounded-md bg-background" />
           </label>
           <label className="text-sm">
             <div className="font-medium mb-1">Phí nền tảng (%)</div>
-            <input type="number" value={form.platformFeePct} onChange={(event) => setForm({ ...form, platformFeePct: event.target.value })} className="w-full px-3 py-2 border rounded-md bg-background" />
+            <input type="number" value={form.platformFeePct} onChange={(event: any) => setForm(prev => ({ ...prev, platformFeePct: event.target.value }))} className="w-full px-3 py-2 border rounded-md bg-background" />
           </label>
           <label className="text-sm">
             <div className="font-medium mb-1">Khuyến mãi (%)</div>
-            <input type="number" value={form.promotionPct} onChange={(event) => setForm({ ...form, promotionPct: event.target.value })} className="w-full px-3 py-2 border rounded-md bg-background" />
+            <input type="number" value={form.promotionPct} onChange={(event: any) => setForm(prev => ({ ...prev, promotionPct: event.target.value }))} className="w-full px-3 py-2 border rounded-md bg-background" />
           </label>
           <label className="text-sm">
             <div className="font-medium mb-1">Lat</div>
-            <input type="number" value={form.latitude} onChange={(event) => setForm({ ...form, latitude: event.target.value })} className="w-full px-3 py-2 border rounded-md bg-background" />
+            <input type="number" value={form.latitude} onChange={(event: any) => setForm(prev => ({ ...prev, latitude: event.target.value }))} className="w-full px-3 py-2 border rounded-md bg-background" />
           </label>
           <label className="text-sm">
             <div className="font-medium mb-1">Lon</div>
-            <input type="number" value={form.longitude} onChange={(event) => setForm({ ...form, longitude: event.target.value })} className="w-full px-3 py-2 border rounded-md bg-background" />
+            <input type="number" value={form.longitude} onChange={(event: any) => setForm(prev => ({ ...prev, longitude: event.target.value }))} className="w-full px-3 py-2 border rounded-md bg-background" />
           </label>
           <label className="text-sm md:col-span-2">
             <div className="font-medium mb-1">Tiện ích (tách bằng dấu phẩy)</div>
-            <input value={form.amenities} onChange={(event) => setForm({ ...form, amenities: event.target.value })} className="w-full px-3 py-2 border rounded-md bg-background" />
+            <input value={form.amenities} onChange={(event: any) => setForm(prev => ({ ...prev, amenities: event.target.value }))} className="w-full px-3 py-2 border rounded-md bg-background" />
           </label>
           <label className="text-sm md:col-span-2">
             <div className="font-medium mb-1">Điểm nổi bật (highlights) (tach bang dau phay)</div>
-            <input value={form.highlights} onChange={(event) => setForm({ ...form, highlights: event.target.value })} className="w-full px-3 py-2 border rounded-md bg-background" />
+            <input value={form.highlights} onChange={(event: any) => setForm(prev => ({ ...prev, highlights: event.target.value }))} className="w-full px-3 py-2 border rounded-md bg-background" />
           </label>
         </div>
 
@@ -240,34 +256,34 @@ export function RoomEditModal({
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm">
                 <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Nhận phòng (HH:mm)</div>
-                <input value={form.policy.checkInTime} onChange={e => setForm({ ...form, policy: { ...form.policy, checkInTime: e.target.value } })} className="w-full px-3 py-2 border rounded bg-background" placeholder="14:00" />
+                <input value={form.policy.checkInTime} onChange={e => setForm(prev => ({ ...prev, policy: { ...form.policy, checkInTime: e.target.value } }))} className="w-full px-3 py-2 border rounded bg-background" placeholder="14:00" />
               </label>
               <label className="text-sm">
                 <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Trả phòng (HH:mm)</div>
-                <input value={form.policy.checkOutTime} onChange={e => setForm({ ...form, policy: { ...form.policy, checkOutTime: e.target.value } })} className="w-full px-3 py-2 border rounded bg-background" placeholder="12:00" />
+                <input value={form.policy.checkOutTime} onChange={e => setForm(prev => ({ ...prev, policy: { ...form.policy, checkOutTime: e.target.value } }))} className="w-full px-3 py-2 border rounded bg-background" placeholder="12:00" />
               </label>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm">
                 <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Tuổi ở miễn phí</div>
-                <input type="number" value={form.policy.childrenFreeAge} onChange={e => setForm({ ...form, policy: { ...form.policy, childrenFreeAge: e.target.value } })} className="w-full px-3 py-2 border rounded bg-background" />
+                <input type="number" value={form.policy.childrenFreeAge} onChange={e => setForm(prev => ({ ...prev, policy: { ...form.policy, childrenFreeAge: e.target.value } }))} className="w-full px-3 py-2 border rounded bg-background" />
               </label>
               <label className="text-sm">
                 <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Hủy phòng (giờ)</div>
-                <input type="number" disabled={!form.policy.refundable} value={form.policy.freeCancelHours} onChange={e => setForm({ ...form, policy: { ...form.policy, freeCancelHours: e.target.value } })} className="w-full px-3 py-2 border rounded bg-background disabled:opacity-50" />
+                <input type="number" disabled={!form.policy.refundable} value={form.policy.freeCancelHours} onChange={e => setForm(prev => ({ ...prev, policy: { ...form.policy, freeCancelHours: e.target.value } }))} className="w-full px-3 py-2 border rounded bg-background disabled:opacity-50" />
               </label>
             </div>
             <div className="flex gap-4">
               <label className="flex items-center gap-2 text-xs cursor-pointer">
-                <input type="checkbox" checked={form.policy.refundable} onChange={e => setForm({ ...form, policy: { ...form.policy, refundable: e.target.checked } })} />
+                <input type="checkbox" checked={form.policy.refundable} onChange={e => setForm(prev => ({ ...prev, policy: { ...form.policy, refundable: e.target.checked } }))} />
                 Hoàn tiền
               </label>
               <label className="flex items-center gap-2 text-xs cursor-pointer">
-                <input type="checkbox" checked={form.policy.petAllowed} onChange={e => setForm({ ...form, policy: { ...form.policy, petAllowed: e.target.checked } })} />
+                <input type="checkbox" checked={form.policy.petAllowed} onChange={e => setForm(prev => ({ ...prev, policy: { ...form.policy, petAllowed: e.target.checked } }))} />
                 Vật nuôi
               </label>
               <label className="flex items-center gap-2 text-xs cursor-pointer">
-                <input type="checkbox" checked={form.policy.smokingAllowed} onChange={e => setForm({ ...form, policy: { ...form.policy, smokingAllowed: e.target.checked } })} />
+                <input type="checkbox" checked={form.policy.smokingAllowed} onChange={e => setForm(prev => ({ ...prev, policy: { ...form.policy, smokingAllowed: e.target.checked } }))} />
                 Hút thuốc
               </label>
             </div>
@@ -276,11 +292,11 @@ export function RoomEditModal({
             <div className="font-medium opacity-0">...</div>
             <label className="text-sm block">
               <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Ghi chú hủy phòng</div>
-              <textarea value={form.policy.cancellationNote} onChange={e => setForm({ ...form, policy: { ...form.policy, cancellationNote: e.target.value } })} rows={2} className="w-full px-3 py-2 border rounded bg-background" />
+              <textarea value={form.policy.cancellationNote} onChange={e => setForm(prev => ({ ...prev, policy: { ...form.policy, cancellationNote: e.target.value } }))} rows={2} className="w-full px-3 py-2 border rounded bg-background" />
             </label>
             <label className="text-sm block">
               <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Quy định khác</div>
-              <textarea value={form.policy.otherRules} onChange={e => setForm({ ...form, policy: { ...form.policy, otherRules: e.target.value } })} rows={2} className="w-full px-3 py-2 border rounded bg-background" />
+              <textarea value={form.policy.otherRules} onChange={e => setForm(prev => ({ ...prev, policy: { ...form.policy, otherRules: e.target.value } }))} rows={2} className="w-full px-3 py-2 border rounded bg-background" />
             </label>
           </div>
         </div>
@@ -293,18 +309,18 @@ export function RoomEditModal({
                 <div className="grid grid-cols-2 gap-2">
                   <div className="col-span-2">
                     <label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Tên loại phòng</label>
-                    <input value={price.label} onChange={(event) => updatePrice(index, "label", event.target.value)} placeholder="VD: Deluxe King" className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                    <input value={price.label} onChange={(event: any) => updatePrice(index, "label", event.target.value)} placeholder="VD: Deluxe King" className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
                   </div>
                   <div className="col-span-2 space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">URL ảnh phòng ({price.imageUrls.length})</label>
-                      <button type="button" onClick={() => { const next = [...form.prices]; next[index].imageUrls.push(""); setForm({ ...form, prices: next }); }} className="text-[10px] text-primary font-bold hover:underline">+ Thêm URL</button>
+                      <button type="button" onClick={() => { const next = [...form.prices]; next[index].imageUrls.push(""); setForm(prev => ({ ...prev, prices: next })); }} className="text-[10px] text-primary font-bold hover:underline">+ Thêm URL</button>
                     </div>
                     <div className="space-y-2">
                       {price.imageUrls.map((url: string, uIdx: number) => (
                         <div key={uIdx} className="flex gap-2">
-                          <input value={url} onChange={(event) => { const next = [...form.prices]; next[index].imageUrls[uIdx] = event.target.value; setForm({ ...form, prices: next }); }} placeholder="https://..." className="flex-1 px-3 py-1.5 border rounded-md bg-background text-xs" />
-                          <button type="button" onClick={() => { const next = [...form.prices]; next[index].imageUrls.splice(uIdx, 1); setForm({ ...form, prices: next }); }} className="px-2 text-destructive">X</button>
+                          <input value={url} onChange={(event: any) => { const next = [...form.prices]; next[index].imageUrls[uIdx] = event.target.value; setForm(prev => ({ ...prev, prices: next })); }} placeholder="https://..." className="flex-1 px-3 py-1.5 border rounded-md bg-background text-xs" />
+                          <button type="button" onClick={() => { const next = [...form.prices]; next[index].imageUrls.splice(uIdx, 1); setForm(prev => ({ ...prev, prices: next })); }} className="px-2 text-destructive">X</button>
                         </div>
                       ))}
                     </div>
@@ -318,34 +334,34 @@ export function RoomEditModal({
                   </div>
                   <div className="col-span-2">
                     <label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Thông tin giường</label>
-                    <input value={price.bedInfo} onChange={(event) => updatePrice(index, "bedInfo", event.target.value)} placeholder="VD: 1 giường đôi King" className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                    <input value={price.bedInfo} onChange={(event: any) => updatePrice(index, "bedInfo", event.target.value)} placeholder="VD: 1 giường đôi King" className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
                   </div>
                   <div>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Giá mỗi đêm</label>
-                    <input type="number" value={price.pricePerNight} onChange={(event) => updatePrice(index, "pricePerNight", event.target.value)} placeholder="₫" className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                    <input type="number" value={price.pricePerNight} onChange={(event: any) => updatePrice(index, "pricePerNight", event.target.value)} placeholder="₫" className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
                   </div>
                   <div>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Diện tích (m2)</label>
-                    <input type="number" value={price.area} onChange={(event) => updatePrice(index, "area", event.target.value)} placeholder="30" className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                    <input type="number" value={price.area} onChange={(event: any) => updatePrice(index, "area", event.target.value)} placeholder="30" className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
                   </div>
                   <div>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Sức chứa (người)</label>
-                    <input type="number" value={price.capacity} onChange={(event) => updatePrice(index, "capacity", event.target.value)} placeholder="2" className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                    <input type="number" value={price.capacity} onChange={(event: any) => updatePrice(index, "capacity", event.target.value)} placeholder="2" className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
                   </div>
                   <div className="col-span-2">
                     <label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Tiện ích riêng</label>
-                    <textarea value={price.amenities} onChange={(event) => updatePrice(index, "amenities", event.target.value)} placeholder="VD: Ban công, Bồn tắm..." className="w-full px-3 py-2 border rounded-md bg-background text-sm" rows={2} />
+                    <textarea value={price.amenities} onChange={(event: any) => updatePrice(index, "amenities", event.target.value)} placeholder="VD: Ban công, Bồn tắm..." className="w-full px-3 py-2 border rounded-md bg-background text-sm" rows={2} />
                   </div>
                 </div>
 
                 {form.prices.length > 1 && (
-                  <button onClick={() => setForm({ ...form, prices: form.prices.filter((_, itemIndex) => itemIndex !== index) })} className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-md hover:scale-110 transition-transform">
+                  <button onClick={() => setForm(prev => ({ ...prev, prices: form.prices.filter((_, itemIndex) => itemIndex !== index) }))} className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-md hover:scale-110 transition-transform">
                     ×
                   </button>
                 )}
               </div>
             ))}
-            <button onClick={() => setForm({ ...form, prices: [...form.prices, { label: "", pricePerNight: "", area: "", capacity: "", amenities: "", imageUrls: [], bedInfo: "" }] })} className="w-full py-2 border-2 border-dashed rounded-lg text-sm text-primary hover:bg-primary/5 transition-colors font-medium">
+            <button onClick={() => setForm(prev => ({ ...prev, prices: [...form.prices, { label: "", pricePerNight: "", area: "", capacity: "", amenities: "", imageUrls: [], bedInfo: "" }] }))} className="w-full py-2 border-2 border-dashed rounded-lg text-sm text-primary hover:bg-primary/5 transition-colors font-medium">
               + Thêm phòng nghỉ mới
             </button>
           </div>
@@ -367,12 +383,12 @@ export function RoomEditModal({
                   <input value={img.url} onChange={(e) => updateHotelImage(index, "url", e.target.value)} placeholder="URL ảnh (https://...)" className="w-full px-2 py-1 border rounded bg-background text-xs" />
                   {img.url && <img src={img.url} className="w-full h-20 object-cover rounded border shadow-sm" alt="" />}
                   {!isRequired && (
-                    <button onClick={() => setForm({ ...form, images: form.images.filter((_, i) => i !== index) })} className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-white rounded-full text-[10px] flex items-center justify-center shadow-sm">×</button>
+                    <button onClick={() => setForm(prev => ({ ...prev, images: form.images.filter((_, i) => i !== index) }))} className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-white rounded-full text-[10px] flex items-center justify-center shadow-sm">×</button>
                   )}
                 </div>
               );
             })}
-            <button onClick={() => setForm({ ...form, images: [...form.images, { category: "other", url: "", caption: "" }] })} className="border-2 border-dashed rounded-lg p-3 text-xs text-primary hover:bg-primary/5">
+            <button onClick={() => setForm(prev => ({ ...prev, images: [...form.images, { category: "other", url: "", caption: "" }] }))} className="border-2 border-dashed rounded-lg p-3 text-xs text-primary hover:bg-primary/5">
               + Thêm ảnh khác
             </button>
           </div>
@@ -386,24 +402,24 @@ export function RoomEditModal({
                 <input value={tc.name} onChange={(e) => {
                   const next = [...form.transportConnections];
                   next[index].name = e.target.value;
-                  setForm({ ...form, transportConnections: next });
+                  setForm(prev => ({ ...prev, transportConnections: next }));
                 }} placeholder="Tên kết nối" className="px-3 py-2 border rounded-md bg-background text-sm" />
                 <input value={tc.distance} onChange={(e) => {
                   const next = [...form.transportConnections];
                   next[index].distance = e.target.value;
-                  setForm({ ...form, transportConnections: next });
+                  setForm(prev => ({ ...prev, transportConnections: next }));
                 }} placeholder="Khoảng cách" className="px-3 py-2 border rounded-md bg-background text-sm" />
                 <div className="flex gap-2">
                   <input value={tc.note} onChange={(e) => {
                     const next = [...form.transportConnections];
                     next[index].note = e.target.value;
-                    setForm({ ...form, transportConnections: next });
+                    setForm(prev => ({ ...prev, transportConnections: next }));
                   }} placeholder="Ghi chú" className="flex-1 px-3 py-2 border rounded-md bg-background text-sm" />
-                  <button onClick={() => setForm({ ...form, transportConnections: form.transportConnections.filter((_, i) => i !== index) })} className="px-2 text-destructive">×</button>
+                  <button onClick={() => setForm(prev => ({ ...prev, transportConnections: form.transportConnections.filter((_, i) => i !== index) }))} className="px-2 text-destructive">×</button>
                 </div>
               </div>
             ))}
-            <button onClick={() => setForm({ ...form, transportConnections: [...form.transportConnections, { name: "", distance: "", note: "" }] })} className="text-sm text-primary">
+            <button onClick={() => setForm(prev => ({ ...prev, transportConnections: [...form.transportConnections, { name: "", distance: "", note: "" }] }))} className="text-sm text-primary">
               + Thêm kết nối
             </button>
           </div>
@@ -415,14 +431,14 @@ export function RoomEditModal({
             <div className="min-w-[800px] space-y-2">
               {form.nearbyPlaces.map((place, index) => (
                 <div key={index} className="grid grid-cols-5 gap-2 items-center">
-                  <input value={place.name} onChange={(event) => updateNearby(index, "name", event.target.value)} placeholder="Tên địa điểm" className="px-3 py-2 border rounded-md bg-background text-sm" />
-                  <input value={place.type} onChange={(event) => updateNearby(index, "type", event.target.value)} placeholder="Loai" className="px-3 py-2 border rounded-md bg-background text-sm" />
-                  <input type="number" value={place.distanceM} onChange={(event) => updateNearby(index, "distanceM", event.target.value)} placeholder="Khoảng cách" className="px-3 py-2 border rounded-md bg-background text-sm" />
-                  <input type="number" value={place.lat} onChange={(event) => updateNearby(index, "lat", event.target.value)} placeholder="Lat" className="px-3 py-2 border rounded-md bg-background text-sm" />
+                  <input value={place.name} onChange={(event: any) => updateNearby(index, "name", event.target.value)} placeholder="Tên địa điểm" className="px-3 py-2 border rounded-md bg-background text-sm" />
+                  <input value={place.type} onChange={(event: any) => updateNearby(index, "type", event.target.value)} placeholder="Loai" className="px-3 py-2 border rounded-md bg-background text-sm" />
+                  <input type="number" value={place.distanceM} onChange={(event: any) => updateNearby(index, "distanceM", event.target.value)} placeholder="Khoảng cách" className="px-3 py-2 border rounded-md bg-background text-sm" />
+                  <input type="number" value={place.lat} onChange={(event: any) => updateNearby(index, "lat", event.target.value)} placeholder="Lat" className="px-3 py-2 border rounded-md bg-background text-sm" />
                   <div className="flex gap-2">
-                    <input type="number" value={place.lon} onChange={(event) => updateNearby(index, "lon", event.target.value)} placeholder="Lon" className="flex-1 px-3 py-2 border rounded-md bg-background text-sm" />
+                    <input type="number" value={place.lon} onChange={(event: any) => updateNearby(index, "lon", event.target.value)} placeholder="Lon" className="flex-1 px-3 py-2 border rounded-md bg-background text-sm" />
                     {form.nearbyPlaces.length > 1 && (
-                      <button onClick={() => setForm({ ...form, nearbyPlaces: form.nearbyPlaces.filter((_, itemIndex) => itemIndex !== index) })} className="px-2 text-destructive">
+                      <button onClick={() => setForm(prev => ({ ...prev, nearbyPlaces: form.nearbyPlaces.filter((_, itemIndex) => itemIndex !== index) }))} className="px-2 text-destructive">
                         ×
                       </button>
                     )}
@@ -431,7 +447,7 @@ export function RoomEditModal({
               ))}
             </div>
           </div>
-          <button onClick={() => setForm({ ...form, nearbyPlaces: [...form.nearbyPlaces, { name: "", type: "", distanceM: "", lat: "", lon: "" }] })} className="text-sm text-primary mt-2">
+          <button onClick={() => setForm(prev => ({ ...prev, nearbyPlaces: [...form.nearbyPlaces, { name: "", type: "", distanceM: "", lat: "", lon: "" }] }))} className="text-sm text-primary mt-2">
             + Thêm địa điểm
           </button>
         </div>
