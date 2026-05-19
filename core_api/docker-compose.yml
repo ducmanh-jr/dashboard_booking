@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  database:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: nowayhome-db
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=YourSecurePassword123!
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S-1", "-U", "sa", "-P", "YourSecurePassword123!", "-Q", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: nowayhome-core-api:latest
+    build:
+      context: ./core_api
+      dockerfile: Dockerfile
+    container_name: nowayhome-api
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=database;Database=NowayhomeDb;User Id=sa;Password=YourSecurePassword123!;Encrypt=True;TrustServerCertificate=True;
+      - Jwt__Key=SuperSecretKeyForDevelopmentOnlyChangeInProduction
+      - Jwt__Issuer=NowayhomeIssuer
+      - Jwt__Audience=NowayhomeAudience
+      - Jwt__ExpiresInMinutes=60
+    depends_on:
+      database:
+        condition: service_healthy
+
+volumes:
+  mssql-data:
