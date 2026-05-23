@@ -64,7 +64,7 @@ public class AppDbContext : DbContext
             b.Property(x => x.StartDate).HasColumnName("check_in_date");
             b.Property(x => x.EndDate).HasColumnName("check_out_date");
             
-            // Handle status conversions between C# and MySQL enum
+            // Keep API-facing status names stable while PostgreSQL stores enum text.
             b.Property(x => x.Status).HasColumnName("status")
              .HasConversion(
                  v => string.IsNullOrWhiteSpace(v) ? "pending" : v.ToLower(),

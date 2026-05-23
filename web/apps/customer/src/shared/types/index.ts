@@ -47,6 +47,9 @@ export type Room = {
   platformFeePct: number;
   promotionPct: number;
   status: string;
+  isArchived?: boolean;
+  isBookable?: boolean;
+  archivedLabel?: string | null;
 };
 
 export type Booking = {
@@ -67,6 +70,9 @@ export type Booking = {
   createdAt: string;
   checkInTime?: string;
   checkOutTime?: string;
+  propertyStatus?: string | null;
+  propertyIsArchived?: boolean;
+  propertyArchivedLabel?: string | null;
 };
 
 export type SearchState = {

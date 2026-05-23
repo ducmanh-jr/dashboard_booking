@@ -1,116 +1,108 @@
 # Database
 
-Thư mục này chứa toàn bộ nội dung liên quan đến database của hệ thống.
+Thu muc nay la bo cong cu quan ly database cho `can_lam`. Y tuong giong `ban_goc/database`: co baseline de reset, co migrations de luu vet thay doi schema, va co snapshots de chia se trang thai DB hien tai. Khac biet quan trong: `can_lam` chi dung PostgreSQL.
 
-```
+```text
 database/
+├── .env
 ├── baseline/
-│   ├── 3.8.sql        ← Baseline gốc (legacy). Có chứa DROP DATABASE — chỉ chạy thủ công khi cần reset hoàn toàn.
-│   └── import.ps1     ← Script import baseline thủ công.
+│   ├── import.ps1
+│   └── import.mjs
 ├── migrations/
-│   └── YYYYMMDD_*.sql ← Các migration file được đánh số theo ngày. Chạy tự động khi server khởi động.
+│   └── 20260513_init_schema.sql
+├── scripts/
+│   └── postgres-tools.mjs
 └── snapshots/
-    ├── schema.sql      ← Schema hiện tại (auto-generated). Dùng để bootstrap DB mới.
-    ├── data.sql        ← Dữ liệu hiện tại (auto-generated). Dùng để bootstrap DB mới.
-    ├── export.mjs      ← Engine export (Node.js ESM).
-    └── export.ps1      ← PowerShell wrapper để chạy export thủ công.
+    ├── schema.sql
+    ├── data.sql
+    ├── export.ps1
+    └── export.mjs
 ```
 
----
+## 1. Cau hinh
 
-## 1. baseline/ — Baseline gốc
-
-`baseline/3.8.sql` là bản dump MySQL đầy đủ, có thể tạo lại database `agoda_clone` từ đầu.  
-File này chứa `DROP DATABASE IF EXISTS` nên **không được** chạy tự động.
-
-Chỉ dùng khi bạn muốn **reset hoàn toàn** database về trạng thái ban đầu:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File database/baseline/import.ps1
-```
-
-> Script yêu cầu gõ `RESET` để xác nhận trước khi thực thi.
-
----
-
-## 2. migrations/ — Migration files
-
-Chứa các file SQL được đánh số theo ngày (`YYYYMMDD_tên.sql`).  
-Mỗi file phải **idempotent** (chạy nhiều lần không gây lỗi).
-
-**Chạy tự động** khi server khởi động (qua `backend/src/databasePatches.js`).  
-**Chạy thủ công:**
-
-```powershell
-pnpm migrate   # từ thư mục gốc
-```
-
-Quy tắc đặt tên:
-- `20260512_app_adapter.sql` — ngày + mô tả ngắn
-- Các file được sort theo tên → thứ tự chạy = thứ tự alphabetical
-
----
-
-## 3. snapshots/ — Database snapshots
-
-Hai file `schema.sql` và `data.sql` là **snapshot tự động** của database hiện tại.
-
-### Tự động đồng bộ
-
-Backend tự export snapshot theo lịch khi bật:
+Gia tri ket noi chuan nam trong `backend/.env`. File `database/.env` chi la cau hinh phu cho tool:
 
 ```env
-DATA_SYNC_ENABLED=true
-DATA_SYNC_INTERVAL_MINUTES=5
+DATABASE_URL="postgresql://nowayhome:nowayhome@localhost:5432/nowayhome?schema=public"
+POSTGRES_DOCKER_CONTAINER=nowayhome-postgres
+POSTGRES_DOCKER_COMPOSE=backend/docker-compose.yml
+POSTGRES_DOCKER_SERVICE=postgres
+DATA_SYNC_INTERVAL_SECONDS=60
 ```
 
-### Export thủ công
+Tool se uu tien `backend/.env`, nen backend va database script luon dung cung mot database.
+
+## 2. Export snapshot
+
+Chay lenh:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File database/snapshots/export.ps1
 ```
 
-### Cơ chế nạp dữ liệu (Safety First)
+Ket qua:
 
-Để tránh việc vô tình làm mất dữ liệu quan trọng, cơ chế nạp (bootstrap) hoạt động như sau:
+- `database/snapshots/schema.sql`: schema PostgreSQL hien tai.
+- `database/snapshots/data.sql`: du lieu PostgreSQL hien tai.
 
-*   **Mặc định (Tự động)**: Hệ thống **CHỈ** nạp dữ liệu từ `snapshots` khi Database của bạn đang **trống rỗng** (chưa có bảng nào). Nếu đã có bảng, Backend sẽ bỏ qua bước này để bảo vệ dữ liệu hiện tại của bạn.
-*   **Xóa sạch & Nạp lại (Chủ động)**: Nếu bạn muốn xóa toàn bộ dữ liệu cũ để đồng bộ hoàn toàn với bản snapshot mới nhất, hãy chạy lệnh:
-    ```bash
-    pnpm db:reset:latest
-    ```
-    *Lưu ý: Lệnh này sẽ DROP toàn bộ bảng cũ và nạp lại từ snapshots/.*
+Script tu dung `pg_dump` neu may co cai san. Neu khong co, script tu chay `pg_dump` ben trong Docker container `nowayhome-postgres`.
 
-*   **Reset cưỡng bức mỗi khi khởi động**: Nếu bạn muốn Backend luôn luôn reset DB mỗi khi restart (phù hợp cho môi trường Demo), hãy thêm dòng này vào `.env`:
-    ```env
-    DB_FORCE_BOOTSTRAP=true
-    ```
+Khi chay `start-all.bat`, he thong tu dong export lai `schema.sql` va `data.sql` theo chu ky de luu cac thay doi data phat sinh trong luc app dang chay.
 
----
+## 3. Reset database tu snapshot
 
-## Workflow tổng quát
-
-### Lần đầu clone dự án
+Chay lenh:
 
 ```powershell
-# Chỉ cần start server — tự động bootstrap
-pnpm dev
+pnpm db:reset
 ```
 
-### Reset database về bản snapshot mới nhất
+Script se yeu cau go `RESET`, sau do:
+
+1. Drop toan bo schema `public`.
+2. Tao lai schema `public`.
+3. Nap `database/snapshots/schema.sql`.
+4. Nap `database/snapshots/data.sql`.
+
+## 3.1. Tu dong khi chay start-all.bat
+
+`start-all.bat` se coi `database/snapshots/schema.sql` va `database/snapshots/data.sql` la nguon du lieu chuan moi nhat. Moi lan chay, script se:
+
+1. Khoi dong PostgreSQL.
+2. Xoa schema `public` hien tai.
+3. Nap lai schema va data tu snapshots.
+4. Chay Prisma migrate.
+5. Khoi dong cac app.
+
+Dieu nay dam bao nguoi B tai folder cua nguoi A ve va bam `start-all.bat` se nhan dung data moi trong folder.
+
+## 4. Migration
+
+Nguon schema chuan cua he PostgreSQL van la Prisma:
+
+- `backend/prisma/schema.prisma`
+- `backend/prisma/migrations/`
+
+Thu muc `database/migrations/` giu ban SQL tham chieu de tuong tu cau truc ben `ban_goc`. Khi thay doi schema that, hay tao Prisma migration truoc, sau do export/copy SQL tu Prisma sang `database/migrations/` neu can tai lieu hoa.
+
+Chay migration Prisma:
+
 ```powershell
-pnpm db:reset:latest
+pnpm db:migrate
 ```
 
-### Reset database về bản baseline (v3.8)
+## 5. Quy trinh de xuat
+
+Sau khi sua data hoac import data moi:
+
 ```powershell
-pnpm db:reset:38
-pnpm migrate
+powershell -ExecutionPolicy Bypass -File database/snapshots/export.ps1
 ```
 
-### Thêm thay đổi schema mới
+Sau khi clone sang may khac hoac can reset DB:
 
-1. Tạo file `database/migrations/YYYYMMDD_mô_tả.sql`.
-2. Viết SQL idempotent (dùng `IF NOT EXISTS`, `ON DUPLICATE KEY`, v.v.).
-3. Khởi động lại server — migration tự chạy.
-4. Snapshot sẽ được cập nhật tự động (nếu `DATA_SYNC_ENABLED=true`).
+```powershell
+pnpm db:reset
+pnpm db:migrate
+```

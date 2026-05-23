@@ -1,18 +1,23 @@
-version: "3.8"
-
 services:
-  db:
-    image: mysql:8.0
-    container_name: nowayhome-mysql
+  postgres:
+    image: postgres:16-alpine
+    container_name: nowayhome-postgres
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: "1234" # Thay bằng pass của bạn
-      MYSQL_DATABASE: agoda_clone
+      POSTGRES_USER: nowayhome
+      POSTGRES_PASSWORD: nowayhome
+      POSTGRES_DB: nowayhome
     ports:
-      - "3306:3306"
+      - '5432:5432'
     volumes:
-      - mysql_data:/var/lib/mysql
-    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+      - postgres_data:/var/lib/postgresql/data
+      - ./docs/postgresql3.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - nowayhome_network
 
 volumes:
-  mysql_data:
+  postgres_data:
+
+networks:
+  nowayhome_network:
+    driver: bridge

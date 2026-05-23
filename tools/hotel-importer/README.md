@@ -116,7 +116,7 @@ Moi khach san co the co nhieu hang phong trong truong `room_options` theo format
 Ten phong:gia:m2:suc chua:giuong:so phong:anh1;anh2|Ten phong 2:gia:m2:suc chua:giuong:so phong:anh1;anh2
 ```
 
-Khi sinh SQL, moi hang phong trong `room_options` se thanh mot dong `property_pricing`.
+Khi sinh SQL PostgreSQL, moi hang phong trong `room_options` se duoc map vao `room_types`, `rate_plans` va `daily_rates`. Anh se duoc nap vao `property_media`, tien ich vao `amenities` va `property_amenities`.
 
 ## CLI nhanh
 

@@ -36,46 +36,46 @@ import {
 } from "../../../../shared/components/ui";
 
 const TEXT = {
-  title: "\u0054\u1ed5\u006e\u0067 \u0071\u0075\u0061\u006e \u0068\u1ec7 \u0074\u0068\u1ed1\u006e\u0067",
-  subtitle: "\u0054\u0068\u0065\u006f \u0064\u00f5\u0069 \u0068\u0069\u1ec7\u0075 \u0073\u0075\u1ea5\u0074 \u0076\u00e0 \u0071\u0075\u1ea3\u006e \u006c\u00fd \u0070\u0068\u00ea \u0064\u0075\u0079\u1ec7\u0074.",
-  week: "\u0054\u0075\u1ea7\u006e",
-  month: "\u0054\u0068\u00e1\u006e\u0067",
-  year: "\u004e\u0103\u006d",
-  revenue: "\u0044\u006f\u0061\u006e\u0068 \u0074\u0068\u0075",
-  pendingPartners: "\u0110\u1ed1\u0069 \u0074\u00e1\u0063 \u0063\u0068\u1edd \u0064\u0075\u0079\u1ec7\u0074",
-  newBookings: "\u0110\u1eb7\u0074 \u0070\u0068\u00f2\u006e\u0067 \u006d\u1edb\u0069",
-  newCustomers: "\u004b\u0068\u00e1\u0063\u0068 \u0068\u00e0\u006e\u0067 \u006d\u1edb\u0069",
-  needAction: "\u0043\u1ea7\u006e \u0078\u1eed \u006c\u00fd \u006e\u0067\u0061\u0079",
-  done: "\u0110\u00e3 \u0078\u006f\u006e\u0067",
-  periodSuffix: "\u006b\u1ef3 \u006e\u00e0\u0079",
-  chartTitle: "\u0058\u0075 \u0068\u01b0\u1edb\u006e\u0067 \u0111\u1eb7\u0074 \u0070\u0068\u00f2\u006e\u0067",
-  chartHint: "\u004e\u0068\u1ea5\u0070 \u0111\u1ec3 \u0078\u0065\u006d \u0064\u0061\u006e\u0068 \u0073\u00e1\u0063\u0068, \u006e\u0068\u1ea5\u0070 \u0111\u00fa\u0070 \u0111\u1ec3 \u0078\u0065\u006d \u0063\u0068\u0069 \u0074\u0069\u1ebf\u0074.",
-  bookings: "\u0110\u1eb7\u0074 \u0070\u0068\u00f2\u006e\u0067",
-  date: "\u004e\u0067\u00e0\u0079",
-  bookingStatus: "\u0054\u0072\u1ea1\u006e\u0067 \u0074\u0068\u00e1\u0069 \u0111\u1eb7\u0074 \u0070\u0068\u00f2\u006e\u0067",
-  success: "\u0054\u0068\u00e0\u006e\u0068 \u0063\u00f4\u006e\u0067",
-  canceled: "\u0110\u00e3 \u0068\u1ee7\u0079",
-  refunded: "\u0048\u006f\u00e0\u006e \u0074\u0069\u1ec1\u006e",
-  recentActivity: "\u0048\u006f\u1ea1\u0074 \u0111\u1ed9\u006e\u0067 \u0067\u1ea7\u006e \u0111\u00e2\u0079",
-  noActivity: "\u0043\u0068\u01b0\u0061 \u0063\u00f3 \u0068\u006f\u1ea1\u0074 \u0111\u1ed9\u006e\u0067 \u006e\u00e0\u006f",
-  viewAll: "\u0058\u0065\u006d \u0074\u1ea5\u0074 \u0063\u1ea3",
-  todayActions: "\u0043\u1ea7\u006e \u0078\u1eed \u006c\u00fd \u0068\u00f4\u006d \u006e\u0061\u0079",
-  actionSubtitle: "\u0043\u00e1\u0063 \u0076\u0069\u1ec7\u0063 \u0063\u1ea7\u006e \u0061\u0064\u006d\u0069\u006e \u0072\u0061 \u0071\u0075\u0079\u1ebf\u0074 \u0111\u1ecb\u006e\u0068",
-  pendingRooms: "\u004b\u0068\u00e1\u0063\u0068 \u0073\u1ea1\u006e/\u0070\u0068\u00f2\u006e\u0067 \u0063\u0068\u1edd \u0064\u0075\u0079\u1ec7\u0074",
-  roomChangeRequests: "\u0059\u00ea\u0075 \u0063\u1ea7\u0075 \u0063\u0068\u1ec9\u006e\u0068 \u0073\u1eeda/\u0078\u00f3\u0061 \u0070\u0068\u00f2\u006e\u0067",
-  pendingBookingActions: "\u0042\u006f\u006f\u006b\u0069\u006e\u0067 \u0063\u1ea7\u006e \u0078\u00e1\u0063 \u006e\u0068\u1ead\u006e/\u0068\u1ee7\u0079",
-  actionItems: "\u0076\u0069\u1ec7\u0063",
-  openAction: "\u0058\u1eed \u006c\u00fd",
-  topHotels: "\u0054\u006f\u0070 \u006b\u0068\u00e1\u0063\u0068 \u0073\u1ea1\u006e \u0074\u0068\u0065\u006f \u0064\u006f\u0061\u006e\u0068 \u0074\u0068\u0075",
-  topHotelsHint: "\u004e\u0068\u1eef\u006e\u0067 \u0111\u1ed1\u0069 \u0074\u00e1\u0063 \u0111\u0061\u006e\u0067 \u006b\u00e9\u006f \u0064\u006f\u0061\u006e\u0068 \u0074\u0068\u0075 \u0074\u0072\u006f\u006e\u0067 \u006b\u1ef3",
-  hotelName: "\u0054\u00ea\u006e \u006b\u0068\u00e1\u0063\u0068 \u0073\u1ea1\u006e",
-  city: "\u0054\u0068\u00e0\u006e\u0068 \u0070\u0068\u1ed1",
-  orders: "\u0053\u1ed1 \u0111\u01a1\u006e",
-  commission: "\u0048\u006f\u0061 \u0068\u1ed3\u006e\u0067",
-  noTopHotels: "\u0043\u0068\u01b0\u0061 \u0063\u00f3 \u0064\u1eef \u006c\u0069\u1ec7\u0075 \u0064\u006f\u0061\u006e\u0068 \u0074\u0068\u0075",
-  topCities: "\u0054\u0068\u00e0\u006e\u0068 \u0070\u0068\u1ed1 \u0111\u0061\u006e\u0067 \u0063\u00f3 \u006e\u0068\u0075 \u0063\u1ea7\u0075 \u0063\u0061\u006f",
-  topCitiesHint: "\u0058\u1ebf\u0070 \u0068\u1ea1\u006e\u0067 \u0074\u0068\u0065\u006f \u0073\u1ed1 \u0062\u006f\u006f\u006b\u0069\u006e\u0067 \u0074\u0072\u006f\u006e\u0067 \u006b\u1ef3",
-  noTopCities: "\u0043\u0068\u01b0\u0061 \u0063\u00f3 \u0064\u1eef \u006c\u0069\u1ec7\u0075 \u0074\u0068\u00e0\u006e\u0068 \u0070\u0068\u1ed1",
+  title: "Tổng quan hệ thống",
+  subtitle: "Theo dõi hiệu suất và quản lý phê duyệt.",
+  week: "Tuần",
+  month: "Tháng",
+  year: "Năm",
+  revenue: "Doanh thu",
+  pendingPartners: "Đối tác chờ duyệt",
+  newBookings: "Đặt phòng mới",
+  newCustomers: "Khách hàng mới",
+  needAction: "Cần xử lý ngay",
+  done: "Đã xong",
+  periodSuffix: "kỳ này",
+  chartTitle: "Xu hướng đặt phòng",
+  chartHint: "Nhấp để xem danh sách, nhấp đúp để xem chi tiết.",
+  bookings: "Đặt phòng",
+  date: "Ngày",
+  bookingStatus: "Trạng thái đặt phòng",
+  success: "Thành công",
+  canceled: "Đã hủy",
+  refunded: "Hoàn tiền",
+  recentActivity: "Hoạt động gần đây",
+  noActivity: "Chưa có hoạt động nào",
+  viewAll: "Xem tất cả",
+  todayActions: "Cần xử lý hôm nay",
+  actionSubtitle: "Các việc cần admin ra quyết định",
+  pendingRooms: "Khách sạn/phòng chờ duyệt",
+  roomChangeRequests: "Yêu cầu chỉnh sửa/xóa phòng",
+  pendingBookingActions: "Booking cần xác nhận/hủy",
+  actionItems: "việc",
+  openAction: "Xử lý",
+  topHotels: "Top khách sạn theo doanh thu",
+  topHotelsHint: "Những đối tác đang kéo doanh thu trong kỳ",
+  hotelName: "Tên khách sạn",
+  city: "Thành phố",
+  orders: "Số đơn",
+  commission: "Hoa hồng",
+  noTopHotels: "Chưa có dữ liệu doanh thu",
+  topCities: "Thành phố đang có nhu cầu cao",
+  topCitiesHint: "Xếp hạng theo số booking trong kỳ",
+  noTopCities: "Chưa có dữ liệu thành phố",
 };
 
 const formatCompactVnd = (value: number) => {
@@ -268,7 +268,7 @@ export function DashboardTab() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
           title={TEXT.revenue}
-          value={`${(stats?.totalRevenue || 0).toLocaleString("vi-VN")} \u0111`}
+          value={`${(stats?.totalRevenue || 0).toLocaleString("vi-VN")} đ`}
           growth={stats?.revenueGrowth || 0}
           icon={TrendingUp}
           color="emerald"
@@ -420,7 +420,7 @@ function TrendChartSection({ chartData, period, navigate }: any) {
                 const fullDate = items?.[0]?.payload?.fullDate;
                 return fullDate ? `${TEXT.date}: ${new Date(fullDate).toLocaleDateString("vi-VN")}` : `${TEXT.date}: ${val}`;
               }}
-              formatter={(value: any, name: any) => [name === "revenue" ? `${value?.toLocaleString("vi-VN")} \u0111` : value, name === "revenue" ? TEXT.revenue : TEXT.bookings]}
+              formatter={(value: any, name: any) => [name === "revenue" ? `${value?.toLocaleString("vi-VN")} đ` : value, name === "revenue" ? TEXT.revenue : TEXT.bookings]}
             />
             <Bar
               yAxisId="left"
@@ -535,9 +535,9 @@ function TopHotelsSection({ topHotels, navigate }: any) {
                       </div>
                     </td>
                     <td className="py-2.5 pr-3 text-zinc-500 font-medium">{hotel.city || "-"}</td>
-                    <td className="py-2.5 pr-3 text-right font-bold text-zinc-950">{formatCompactVnd(Number(hotel.revenue || 0))} {"\u0111"}</td>
+                    <td className="py-2.5 pr-3 text-right font-bold text-zinc-950">{formatCompactVnd(Number(hotel.revenue || 0))} {"đ"}</td>
                     <td className="py-2.5 pr-3 text-right font-semibold text-zinc-700">{hotel.orders || 0}</td>
-                    <td className="py-2.5 text-right font-bold text-emerald-600">{formatCompactVnd(Number(hotel.commission || 0))} {"\u0111"}</td>
+                    <td className="py-2.5 text-right font-bold text-emerald-600">{formatCompactVnd(Number(hotel.commission || 0))} {"đ"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -582,7 +582,7 @@ function TopCitiesSection({ topCities, maxCityBookings, navigate }: any) {
                   </div>
                   <div className="text-right">
                     <div className="text-xs font-bold text-zinc-900">{bookings} {TEXT.bookings}</div>
-                    <div className="mt-0.5 text-[10px] font-semibold text-emerald-600">{formatCompactVnd(Number(item.revenue || 0))} {"\u0111"}</div>
+                    <div className="mt-0.5 text-[10px] font-semibold text-emerald-600">{formatCompactVnd(Number(item.revenue || 0))} {"đ"}</div>
                   </div>
                 </button>
               );

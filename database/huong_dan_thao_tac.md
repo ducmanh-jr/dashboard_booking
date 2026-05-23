@@ -1,38 +1,49 @@
-# Hướng dẫn nạp Dữ liệu & Chạy dự án (Dành cho Người dùng B)
+# Huong dan thao tac database can_lam
 
-Chào bạn! Đây là hướng dẫn nhanh để bạn có thể chạy dự án này trên máy cá nhân với đầy đủ dữ liệu mới nhất.
+## Khoi dong PostgreSQL
 
-## Bước 1: Tạo Database trống (Bắt buộc)
-Backend cần kết nối được vào database để tự động nạp dữ liệu. Bạn hãy tạo một database tên là `agoda_clone` trên MySQL của mình:
-```sql
-CREATE DATABASE IF NOT EXISTS agoda_clone CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```powershell
+docker compose -f backend/docker-compose.yml up -d postgres
 ```
 
-## Bước 2: Cấu hình kết nối (.env)
-Tạo file `.env` ở thư mục gốc (hoặc `backend/.env`) với thông tin MySQL của bạn:
-```env
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=mật_khẩu_của_bạn
-DB_NAME=agoda_clone
+## Export snapshot moi
+
+```powershell
+powershell -ExecutionPolicy Bypass -File database/snapshots/export.ps1
 ```
 
-## Bước 3: Nạp dữ liệu & Khởi động
-Bạn có 2 cách để bắt đầu:
+## Reset database tu snapshot
 
-*   **Cách 1 (Tự động)**: Chạy `start-all.bat`. Backend sẽ thấy DB trống và tự nạp toàn bộ dữ liệu từ snapshot.
-*   **Cách 2 (Chủ động - Khuyên dùng)**: Chạy lệnh sau để đảm bảo DB được reset sạch sẽ và nạp bản mới nhất từ User A:
-    ```bash
-    pnpm db:reset:latest
-    ```
-
-## Bước 4: Cách cập nhật dữ liệu khi có bản mới
-Mỗi khi User A gửi bản cập nhật code mới, bạn chỉ cần chạy lại lệnh:
-```bash
-pnpm db:reset:latest
+```powershell
+pnpm db:reset
 ```
-Hệ thống sẽ tự động cập nhật cấu trúc và dữ liệu mới nhất mà không cần thao tác gì thêm.
 
----
-**Chúc bạn thực hiện thành công!**
+Khi duoc hoi, go:
+
+```text
+RESET
+```
+
+## Chay tat ca bang start-all.bat
+
+```powershell
+.\start-all.bat
+```
+
+Lenh nay se tu dong reset PostgreSQL theo `database/snapshots/schema.sql` va `database/snapshots/data.sql`, sau do moi khoi dong backend va cac web app.
+
+Trong luc he thong dang chay, cua so `nwh-db-sync` se tu dong cap nhat lai `database/snapshots/schema.sql` va `database/snapshots/data.sql` theo chu ky.
+
+## Chay migration Prisma
+
+```powershell
+pnpm db:migrate
+```
+
+## Kiem tra nhanh backend sau khi reset
+
+```powershell
+pnpm --filter backend run build
+```
+
+Sau do chay lai `start-all.bat`.

@@ -4,7 +4,8 @@ export function fmtVnd(value: number) {
 
 export function fmtDate(value: string) {
   if (!value) return "-";
-  return new Date(value).toLocaleDateString("vi-VN");
+  const [year, month, day] = String(value).slice(0, 10).split("-");
+  return year && month && day ? `${Number(day)}/${Number(month)}/${year}` : "-";
 }
 
 export function diffNights(checkIn: string, checkOut: string) {

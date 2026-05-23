@@ -3,7 +3,7 @@
 ## Structure
 
 ```text
-backend/                  Express + MySQL API, port 3001
+backend/                  NestJS + Prisma PostgreSQL API, port 3001
 database/
   3.8.sql                 Imported baseline schema/data. Do not edit.
   patches/                App database patches, auto-run by backend startup

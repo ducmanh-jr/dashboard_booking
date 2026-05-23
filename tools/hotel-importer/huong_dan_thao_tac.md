@@ -1,24 +1,20 @@
-# Hướng dẫn sử dụng Hotel Importer Tool
+# Huong dan su dung Hotel Importer Tool
 
-Công cụ này giúp bạn tự động lấy dữ liệu từ Agoda để nạp vào hệ thống Nowayhome. Dưới đây là các bước thao tác chi tiết:
+Cong cu nay lay/bo sung du lieu khach san va sinh SQL PostgreSQL phu hop voi schema Prisma cua `can_lam`.
 
-## 1. Khởi động công cụ
-Mở terminal tại thư mục gốc dự án và chạy:
+## Khoi dong
+
 ```bash
 cd tools/hotel-importer
 pnpm start
 ```
-Sau đó, truy cập vào địa chỉ: [http://localhost:4317](http://localhost:4317)
 
-## 2. Quy trình thu thập dữ liệu (4 Bước)
+Sau do mo `http://localhost:4317`.
 
-### Bước 4: Nạp vào hệ thống (Quy trình 1-Click)
-Hệ thống sẽ tự động thực hiện:
+## Luong apply
 
-1.  **Thực thi SQL trực tiếp**: Tự động chạy lệnh vào Database `agoda_clone` mà không cần mở MySQL Workbench.
-2.  **Đồng bộ Team**: Tự động cập nhật lại file `database/snapshots/data.sql`. Bạn chỉ cần đẩy code lên là cả team sẽ có dữ liệu mới.
+1. Tool sinh `output/import-preview.sql` de xem truoc.
+2. Khi luu, SQL duoc ghi vao `output/saved/apply.sql`.
+3. Nut apply se dua cac block da duyet vao `database/snapshots/data.sql` theo cu phap PostgreSQL.
 
----
-**Lưu ý:**
-- SQL có tính **idempotent**: Nạp lại nhiều lần vẫn an toàn.
-- Sau khi Apply thành công, tool sẽ tự dọn dẹp file tạm để chuẩn bị cho lần quét sau.
+SQL sinh ra co tinh idempotent: property dung `ON CONFLICT (slug)`, amenity/link/media/room/rate plan deu tranh lap du lieu co san.

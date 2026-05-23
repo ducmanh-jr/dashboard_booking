@@ -1,134 +1,202 @@
-import fs from "fs/promises";
-import path from "path";
-import { createRequire } from "module";
-import { fileURLToPath, pathToFileURL } from "url";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+
+import {
+  backendDir,
+  databaseUrl,
+  loadDatabaseEnv,
+  parseDatabaseUrl,
+  projectRoot,
+  runPgTool,
+  snapshotsDir,
+} from "../scripts/postgres-tools.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
-const snapshotsDir = path.dirname(__filename);
-const root = path.resolve(snapshotsDir, "../..");
-const envPath = path.join(root, ".env");
-const backendEnvPath = path.join(root, "backend", ".env");
-const backendPackageUrl = pathToFileURL(path.join(root, "backend", "package.json"));
-const requireFromBackend = createRequire(backendPackageUrl);
-const mysql = requireFromBackend("mysql2/promise");
+const schemaOut = path.join(snapshotsDir, "schema.sql");
+const dataOut = path.join(snapshotsDir, "data.sql");
+const requireFromBackend = createRequire(path.join(backendDir, "package.json"));
 
-async function loadEnvFile(filePath, override = false) {
-  try {
-    const text = await fs.readFile(filePath, "utf8");
-    for (const rawLine of text.split(/\r?\n/)) {
-      const line = rawLine.trim();
-      if (!line || line.startsWith("#") || !line.includes("=")) continue;
-      const [key, ...rest] = line.split("=");
-      if (override || !process.env[key.trim()]) {
-        process.env[key.trim()] = rest.join("=").trim();
-      }
-    }
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-  }
+function pgToolUrl(rawUrl) {
+  const url = new URL(rawUrl);
+  url.searchParams.delete("schema");
+  return url.toString();
 }
 
-async function loadEnv() {
-  await loadEnvFile(envPath, false);
-  await loadEnvFile(backendEnvPath, true);
-}
-
-function sqlIdentifier(name) {
-  return `\`${String(name).replace(/`/g, "``")}\``;
+function quoteIdent(name) {
+  return `"${String(name).replace(/"/g, '""')}"`;
 }
 
 function sqlValue(value) {
   if (value === null || value === undefined) return "NULL";
-  if (Buffer.isBuffer(value)) return `X'${value.toString("hex")}'`;
-  if (value instanceof Date) {
-    const pad = (n) => String(n).padStart(2, "0");
-    const y = value.getFullYear();
-    const m = pad(value.getMonth() + 1);
-    const d = pad(value.getDate());
-    const hh = pad(value.getHours());
-    const mm = pad(value.getMinutes());
-    const ss = pad(value.getSeconds());
-    return `'${y}-${m}-${d} ${hh}:${mm}:${ss}'`;
-  }
+  if (Buffer.isBuffer(value)) return `decode('${value.toString("hex")}', 'hex')`;
+  if (value instanceof Date) return `'${value.toISOString().replace("T", " ").replace("Z", "+00")}'`;
+  if (typeof value === "bigint") return value.toString();
   if (typeof value === "number") return Number.isFinite(value) ? String(value) : "NULL";
-  if (typeof value === "bigint") return String(value);
-  return `'${String(value).replace(/\\/g, "\\\\").replace(/'/g, "''")}'`;
+  if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
+  if (typeof value === "object") return `'${JSON.stringify(value).replace(/'/g, "''")}'::jsonb`;
+  return `'${String(value).replace(/'/g, "''")}'`;
 }
 
-async function main() {
-  await loadEnv();
+function removeLegacyAuditPayloads(sql) {
+  return sql
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith("INSERT INTO public.legacy_source_rows VALUES") || !line.includes("'audit_logs'"))
+    .join("\n");
+}
 
-  const dbName = process.env.DB_NAME || "agoda_clone";
-  const conn = await mysql.createConnection({
-    host: process.env.DB_HOST || "localhost",
-    port: Number(process.env.DB_PORT || 3306),
-    user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "",
-    database: dbName,
-    dateStrings: true,
-  });
+export async function exportSchemaSync() {
+  await loadDatabaseEnv();
+  await fs.mkdir(snapshotsDir, { recursive: true });
+
+  const url = databaseUrl();
+  const pgUrl = pgToolUrl(url);
+  const parsed = parseDatabaseUrl(url);
+  let schemaSql;
 
   try {
-    const [tableRows] = await conn.query("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'");
-    const tableKey = `Tables_in_${dbName}`;
-    const tables = tableRows
-      .map((row) => row[tableKey] || Object.values(row)[0])
-      .filter(Boolean)
-      .sort();
+    const output = await runPgTool("pg_dump", [
+      "--dbname",
+      pgUrl,
+      "--schema=public",
+      "--schema-only",
+      "--clean",
+      "--if-exists",
+      "--no-owner",
+      "--no-privileges",
+    ], { stdio: ["ignore", "pipe", "inherit"] });
+    schemaSql = output.stdout.trim();
+  } catch (error) {
+    const migrationPath = path.join(backendDir, "prisma", "migrations", "20260513155207_init_schema", "migration.sql");
+    const migrationSql = await fs.readFile(migrationPath, "utf8");
+    schemaSql = [
+      "-- Fallback schema generated from Prisma migration because pg_dump is unavailable.",
+      "DROP SCHEMA IF EXISTS public CASCADE;",
+      "CREATE SCHEMA public;",
+      "",
+      migrationSql.trim(),
+    ].join("\n");
+    console.warn(`pg_dump unavailable, using Prisma migration snapshot instead: ${error.message}`);
+  }
 
-    const now = new Date().toISOString();
-    const schemaParts = [
-      `-- Generated by database/snapshots/export.mjs at ${now}`,
-      `-- Database: ${dbName}`,
-      "SET FOREIGN_KEY_CHECKS = 0;",
+  const content = [
+    `-- PostgreSQL schema snapshot for can_lam.`,
+    `-- Generated by database/snapshots/export.mjs at ${new Date().toISOString()}.`,
+    `-- Database: ${parsed.database}`,
+    "",
+    schemaSql,
+    "",
+  ].join("\n");
+
+  await fs.writeFile(schemaOut, content, "utf8");
+}
+
+export async function exportDataSync() {
+  await loadDatabaseEnv();
+  await fs.mkdir(snapshotsDir, { recursive: true });
+
+  const url = databaseUrl();
+  const pgUrl = pgToolUrl(url);
+  const parsed = parseDatabaseUrl(url);
+  let dataSql;
+
+  try {
+    const output = await runPgTool("pg_dump", [
+      "--dbname",
+      pgUrl,
+      "--schema=public",
+      "--data-only",
+      "--no-owner",
+      "--no-privileges",
+    ], { stdio: ["ignore", "pipe", "inherit"] });
+    dataSql = output.stdout.trim();
+  } catch (error) {
+    console.warn(`pg_dump unavailable, exporting data through Prisma instead: ${error.message}`);
+    dataSql = await exportDataWithPrisma();
+  }
+
+  const content = [
+    `-- PostgreSQL data snapshot for can_lam.`,
+    `-- Generated by database/snapshots/export.mjs at ${new Date().toISOString()}.`,
+    `-- Database: ${parsed.database}`,
+    "-- Apply after snapshots/schema.sql.",
+    "",
+    removeLegacyAuditPayloads(dataSql),
+    "",
+  ].join("\n");
+
+  await fs.writeFile(dataOut, content, "utf8");
+}
+
+async function exportDataWithPrisma() {
+  const { PrismaClient } = requireFromBackend("@prisma/client");
+  const prisma = new PrismaClient();
+  try {
+    const tableRows = await prisma.$queryRaw`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+      ORDER BY table_name
+    `;
+    const parts = [
+      "-- Data exported through Prisma fallback.",
+      "SET session_replication_role = replica;",
       "",
     ];
 
-    for (const table of [...tables].reverse()) {
-      schemaParts.push(`DROP TABLE IF EXISTS ${sqlIdentifier(table)};`);
-    }
-    schemaParts.push("");
+    for (const { table_name: tableName } of tableRows) {
+      const columnRows = await prisma.$queryRawUnsafe(
+        `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 ORDER BY ordinal_position`,
+        tableName,
+      );
+      const columns = columnRows.map((row) => row.column_name);
+      if (!columns.length) continue;
 
-    for (const table of tables) {
-      const [rows] = await conn.query(`SHOW CREATE TABLE ${sqlIdentifier(table)}`);
-      const createSql = rows[0]["Create Table"];
-      schemaParts.push(`${createSql};`, "");
-    }
-    schemaParts.push("SET FOREIGN_KEY_CHECKS = 1;", "");
-
-    const dataParts = [
-      `-- Generated by database/snapshots/export.mjs at ${now}`,
-      `-- Database: ${dbName}`,
-      "SET FOREIGN_KEY_CHECKS = 0;",
-      "",
-    ];
-
-    for (const table of tables) {
-      const [rows, fields] = await conn.query(`SELECT * FROM ${sqlIdentifier(table)}`);
+      const rows = await prisma.$queryRawUnsafe(`SELECT * FROM ${quoteIdent(tableName)}`);
       if (!rows.length) continue;
-      const columns = fields.map((field) => field.name);
-      dataParts.push(`-- Data for ${table}`);
-      for (const row of rows) {
-        const columnSql = columns.map(sqlIdentifier).join(", ");
-        const valueSql = columns.map((column) => sqlValue(row[column])).join(", ");
-        dataParts.push(`INSERT INTO ${sqlIdentifier(table)} (${columnSql}) VALUES (${valueSql});`);
-      }
-      dataParts.push("");
-    }
-    dataParts.push("SET FOREIGN_KEY_CHECKS = 1;", "");
 
-    await fs.writeFile(path.join(snapshotsDir, "schema.sql"), schemaParts.join("\n"), "utf8");
-    await fs.writeFile(path.join(snapshotsDir, "data.sql"), dataParts.join("\n"), "utf8");
+      parts.push(`-- Data for ${quoteIdent(tableName)}`);
+      for (const row of rows) {
+        const columnSql = columns.map(quoteIdent).join(", ");
+        const valueSql = columns.map((column) => sqlValue(row[column])).join(", ");
+        parts.push(`INSERT INTO ${quoteIdent(tableName)} (${columnSql}) VALUES (${valueSql});`);
+      }
+      parts.push("");
+    }
+
+    const sequenceRows = await prisma.$queryRaw`
+      SELECT sequence_name
+      FROM information_schema.sequences
+      WHERE sequence_schema = 'public'
+      ORDER BY sequence_name
+    `;
+    for (const { sequence_name: sequenceName } of sequenceRows) {
+      const [{ last_value: lastValue }] = await prisma.$queryRawUnsafe(
+        `SELECT last_value FROM ${quoteIdent(sequenceName)}`,
+      );
+      parts.push(`SELECT setval('${sequenceName.replace(/'/g, "''")}', ${lastValue}, true);`);
+    }
+
+    parts.push("", "SET session_replication_role = origin;");
+    return parts.join("\n");
   } finally {
-    await conn.end();
+    await prisma.$disconnect();
   }
 }
 
-if (process.argv[1] === __filename) {
-  main().catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+export async function exportAll() {
+  await exportSchemaSync();
+  await exportDataSync();
+  console.log(`Snapshot export completed:`);
+  console.log(`- ${schemaOut}`);
+  console.log(`- ${dataOut}`);
 }
 
-export { main as exportDataSync };
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  exportAll().catch((error) => {
+    console.error(error.message || error);
+    process.exitCode = 1;
+  });
+}

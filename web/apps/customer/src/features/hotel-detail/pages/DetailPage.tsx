@@ -59,10 +59,12 @@ export function DetailPage() {
   if (!room) return <Navigate to="/search" replace />;
 
   const r = room;
+  const isBookable = room.isBookable !== false && room.status !== "suspended" && !room.isArchived;
   const images = [roomImage(r), ...r.images.slice(1, 5).map((item) => item.url)];
   const selectedPrice = r.prices.find((price) => price.label === selected) || r.prices[0];
 
   function book() {
+    if (!isBookable) return;
     const next = new URLSearchParams(params);
     next.set("priceLabel", selectedPrice.label);
     navigate(`/checkout/${r.id}?${next.toString()}`);
@@ -74,6 +76,11 @@ export function DetailPage() {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">{room.name}</h1>
           <p className="text-muted-foreground mt-1">{room.address}</p>
+          {!isBookable && (
+            <div className="mt-2 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">
+              Chỗ nghỉ này hiện không còn nhận đặt phòng
+            </div>
+          )}
         </div>
         <span className="text-sm px-3 py-1 rounded-full bg-secondary border whitespace-nowrap">{room.roomType}</span>
       </div>
@@ -176,8 +183,8 @@ export function DetailPage() {
               );
             })}
           </div>
-          <button onClick={book} disabled={!selectedPrice || selectedPrice.isAvailable === false} className="w-full py-2.5 rounded-md bg-primary text-primary-foreground font-bold disabled:opacity-50">
-            {selectedPrice?.isAvailable === false ? "Hết phòng" : "Đặt phòng"}
+          <button onClick={book} disabled={!isBookable || !selectedPrice || selectedPrice.isAvailable === false} className="w-full py-2.5 rounded-md bg-primary text-primary-foreground font-bold disabled:opacity-50">
+            {!isBookable ? "Ngừng nhận đặt phòng" : selectedPrice?.isAvailable === false ? "Hết phòng" : "Đặt phòng"}
           </button>
         </aside>
       </div>

@@ -61,6 +61,9 @@ export type Room = {
   platformFeePct: number;
   promotionPct: number;
   status: string;
+  isArchived?: boolean;
+  isBookable?: boolean;
+  archivedLabel?: string | null;
   rejectReason: string | null;
   createdAt: string;
   reviewedAt: string | null;
@@ -101,4 +104,3 @@ export const CÓMMON_AMENITIES = [
   "Cho phép thú cưng",
   "Cho phép hút thuốc",
 ];
-

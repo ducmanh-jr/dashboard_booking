@@ -58,11 +58,23 @@ function fmtVnd(value: number) {
 }
 
 function fmtDate(value: string) {
-  return new Date(value).toLocaleDateString("vi-VN");
+  const [year, month, day] = String(value).slice(0, 10).split("-");
+  return year && month && day ? `${Number(day)}/${Number(month)}/${year}` : "-";
 }
 
 function toDateOnly(date: Date) {
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function belongsToUpcomingTab(booking: BookingItem) {
+  return (
+    (booking.isFutureStay || booking.isCurrentStay || booking.status === "pending") &&
+    !booking.isCompleted &&
+    booking.status !== "cancelled"
+  );
 }
 
 function getPresetRange(preset: string) {
@@ -86,10 +98,10 @@ function getPresetRange(preset: string) {
 
 function bookingStatusKey(booking: BookingItem): StatusFilter | "unfinished" {
   if (booking.status === "cancelled") return "cancelled";
+  if (booking.isCompleted) return "completed";
   if (booking.status === "pending") return "pending";
   if (booking.isCurrentStay) return "current";
   if (booking.isFutureStay) return "upcoming";
-  if (booking.isCompleted) return "completed";
   return "unfinished";
 }
 
@@ -103,6 +115,7 @@ function bookingInRange(booking: BookingItem, from: string, to: string) {
 }
 
 function statusText(booking: BookingItem) {
+  if (booking.isCompleted) return "Đã xong";
   if (booking.status === "pending") return "Chờ thanh toán";
   if (booking.status === "cancelled") return "Đã hủy";
   if (booking.status === "confirmed") return "Đã xác nhận";

@@ -1,18 +1,17 @@
-version: '3.8'
-
 services:
   database:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: postgres:16-alpine
     container_name: nowayhome-db
     environment:
-      - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=YourSecurePassword123!
+      POSTGRES_USER: nowayhome
+      POSTGRES_PASSWORD: nowayhome
+      POSTGRES_DB: nowayhome
     ports:
-      - "1433:1433"
+      - "5432:5432"
     volumes:
-      - mssql-data:/var/opt/mssql
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S-1", "-U", "sa", "-P", "YourSecurePassword123!", "-Q", "SELECT 1"]
+      test: ["CMD-SHELL", "pg_isready -U nowayhome -d nowayhome"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,7 +26,7 @@ services:
       - "8080:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Server=database;Database=NowayhomeDb;User Id=sa;Password=YourSecurePassword123!;Encrypt=True;TrustServerCertificate=True;
+      - ConnectionStrings__DefaultConnection=Host=database;Port=5432;Database=nowayhome;Username=nowayhome;Password=nowayhome;
       - Jwt__Key=SuperSecretKeyForDevelopmentOnlyChangeInProduction
       - Jwt__Issuer=NowayhomeIssuer
       - Jwt__Audience=NowayhomeAudience
@@ -37,4 +36,4 @@ services:
         condition: service_healthy
 
 volumes:
-  mssql-data:
+  postgres-data:

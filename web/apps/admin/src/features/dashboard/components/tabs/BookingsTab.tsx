@@ -28,6 +28,9 @@ type BookingItem = {
   isFutureStay: boolean;
   checkInTime?: string;
   checkOutTime?: string;
+  propertyStatus?: string | null;
+  propertyIsArchived?: boolean;
+  propertyArchivedLabel?: string | null;
 };
 
 type HotelReport = {
@@ -37,6 +40,9 @@ type HotelReport = {
   address: string;
   partnerHotelName: string | null;
   partnerEmail: string | null;
+  propertyStatus?: string;
+  isArchived?: boolean;
+  archivedLabel?: string | null;
   isActiveHotel: boolean;
   currentStayCount: number;
   totalBookings: number;
@@ -54,11 +60,23 @@ function fmtVnd(value: number) {
 }
 
 function fmtDate(value: string) {
-  return new Date(value).toLocaleDateString("vi-VN");
+  const [year, month, day] = String(value).slice(0, 10).split("-");
+  return year && month && day ? `${Number(day)}/${Number(month)}/${year}` : "-";
 }
 
 function toDateOnly(date: Date) {
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function belongsToUpcomingTab(booking: BookingItem) {
+  return (
+    (booking.isFutureStay || booking.isCurrentStay || booking.status === "pending") &&
+    !booking.isCompleted &&
+    booking.status !== "cancelled"
+  );
 }
 
 function getPresetRange(preset: string) {
@@ -82,10 +100,10 @@ function getPresetRange(preset: string) {
 
 function bookingStatusKey(booking: BookingItem) {
   if (booking.status === "cancelled") return "cancelled";
+  if (booking.isCompleted) return "completed";
   if (booking.status === "pending") return "pending";
   if (booking.isCurrentStay) return "current";
   if (booking.isFutureStay) return "upcoming";
-  if (booking.isCompleted) return "completed";
   return "unfinished";
 }
 
@@ -396,7 +414,9 @@ export function BookingsTab() {
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="font-bold text-slate-950">{hotel.propertyName}</div>
-                    {!hotel.isActiveHotel && (
+                    {hotel.isArchived ? (
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">Khách sạn đã ngừng hoạt động</span>
+                    ) : !hotel.isActiveHotel && (
                       <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">Chờ duyệt</span>
                     )}
                   </div>
@@ -417,7 +437,7 @@ export function BookingsTab() {
                 <td className="px-4 py-3 text-sm">{splitMoney(hotel.earnedRevenue, Number(hotel.pendingRevenue || 0))}</td>
                 <td className="px-4 py-3 text-sm">{splitMoney(hotel.earnedCommission, Number(hotel.pendingCommission || 0))}</td>
                 <td className="px-4 py-3 text-right">
-                  {!hotel.isActiveHotel && (
+                  {!hotel.isActiveHotel && !hotel.isArchived && (
                     <button
                       onClick={(e) => approveHotel(hotel.propertyId, e)}
                       className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-green-600 text-white hover:bg-green-700 transition shadow-sm"
@@ -474,7 +494,7 @@ function BookingDetailModal({ hotel, onClose, onRefresh, onNavigateToRoom }: { h
   const filteredBookings = useMemo(() => {
     if (activeTab === "cancelled") return hotel.bookings.filter(b => b.status === "cancelled");
     if (activeTab === "completed") return hotel.bookings.filter(b => b.isCompleted && b.status !== "cancelled");
-    return hotel.bookings.filter(b => !b.isCompleted && b.status !== "cancelled");
+    return hotel.bookings.filter(belongsToUpcomingTab);
   }, [hotel.bookings, activeTab]);
 
   return (
@@ -487,7 +507,7 @@ function BookingDetailModal({ hotel, onClose, onRefresh, onNavigateToRoom }: { h
               <h3 className="text-xl font-bold truncate">{hotel.propertyName}</h3>
               <span className="text-[10px] bg-muted px-2 py-0.5 rounded font-bold uppercase shrink-0">ID: {hotel.propertyId}</span>
             </div>
-            <p className="text-xs text-muted-foreground truncate">{hotel.address} | Đối tác: {hotel.partnerEmail}</p>
+            <p className="text-xs text-muted-foreground truncate">{hotel.isArchived && <span className="mr-2 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">Khách sạn đã ngừng hoạt động</span>}{hotel.address} | Đối tác: {hotel.partnerEmail}</p>
           </div>
           <div className="flex items-center gap-3 shrink-0">
             {onNavigateToRoom && (
@@ -535,7 +555,7 @@ function BookingDetailModal({ hotel, onClose, onRefresh, onNavigateToRoom }: { h
               )}
               {filteredBookings.map((booking) => {
                 return (
-                <tr key={booking.id} onClick={() => setSelectedSingle(booking)} className="cursor-pointer hover:bg-muted/30 transition-colors">
+                <tr key={booking.id} onClick={() => setSelectedSingle(booking)} className={`cursor-pointer hover:bg-muted/30 transition-colors ${booking.propertyIsArchived || hotel.isArchived ? "opacity-60 bg-slate-50" : ""}`}>
                   <td className="p-4 font-bold text-xs uppercase">{booking.bookingCode}</td>
                   <td className="p-4">
                     <div className="font-bold">{booking.customerName}</div>
@@ -554,12 +574,14 @@ function BookingDetailModal({ hotel, onClose, onRefresh, onNavigateToRoom }: { h
                   <td className="p-4">
                     <div className="flex flex-col items-center gap-1">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                        booking.status === "pending" ? "text-amber-600 border-amber-200 bg-amber-50" : 
-                        booking.status === "cancelled" ? "text-destructive border-red-200 bg-red-50" : 
+                        booking.isCompleted ? "text-green-600 border-green-200 bg-green-50" :
+                        booking.status === "pending" ? "text-amber-600 border-amber-200 bg-amber-50" :
+                        booking.status === "cancelled" ? "text-destructive border-red-200 bg-red-50" :
                         "text-green-600 border-green-200 bg-green-50"
                       }`}>
-                        {booking.status === "pending" ? "Chờ thanh toán" : 
-                         booking.status === "cancelled" ? "Đã hủy" : 
+                        {booking.isCompleted ? "Đã xong" :
+                         booking.status === "pending" ? "Chờ thanh toán" :
+                         booking.status === "cancelled" ? "Đã hủy" :
                          booking.status === "confirmed" ? "Xác nhận" : booking.status}
                       </span>
                       <span className="text-[9px] text-muted-foreground italic">

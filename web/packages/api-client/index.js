@@ -22,7 +22,8 @@ export function createApi(baseUrl = DEFAULT_API_BASE) {
       if (typeof window !== "undefined" && (response.status === 401 || response.status === 403)) {
         window.dispatchEvent(new CustomEvent("nowayhome:auth-error", { detail: { status: response.status, path } }));
       }
-      throw new ApiError(data.error || DEFAULT_ERROR_MESSAGE, response.status, data);
+      const msg = Array.isArray(data.message) ? data.message.join(', ') : (data.message || data.error || DEFAULT_ERROR_MESSAGE);
+      throw new ApiError(msg, response.status, data);
     }
     return data;
   };

@@ -6,7 +6,26 @@ import { cn } from "@/shared/components/ui";
 import { RoomEditModal } from "../modals/RoomEditModal";
 
 function fmtVnd(value: number) {
-  return `${value.toLocaleString("vi-VN")} ₫`;
+  return `${value.toLocaleString("vi-VN")} đ`;
+}
+
+function isArchivedRoom(room: Room) {
+  return room.isArchived || room.status === "suspended" || room.status === "archived";
+}
+
+function roomStatusLabel(room: Room) {
+  if (isArchivedRoom(room)) return "Ngừng hoạt động";
+  if (room.status === "pending" || room.status === "pending_review") return "Chờ duyệt";
+  if (room.status === "approved" || room.status === "active") return "Đã duyệt";
+  if (room.status === "rejected") return "Từ chối";
+  return room.status;
+}
+
+function roomStatusClass(room: Room) {
+  if (isArchivedRoom(room)) return "bg-slate-100 text-slate-600";
+  if (room.status === "approved" || room.status === "active") return "bg-green-100 text-green-700";
+  if (room.status === "rejected") return "bg-red-100 text-red-700";
+  return "bg-amber-100 text-amber-700";
 }
 
 function requestTypeLabel(room: Room) {
@@ -254,7 +273,7 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
       alert("Khách sạn đang có yêu cầu đối tác chờ duyệt. Hãy xử lý yêu cầu trước.");
       return;
     }
-    if (!confirm(`Xóa khách sạn "${room.name}"?`)) return;
+    if (!confirm(`Chuyển khách sạn "${room.name}" sang trạng thái ngừng hoạt động?`)) return;
     try {
       await deleteRoom(room.id);
       await load();
@@ -277,7 +296,7 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3 justify-between">
         <div className="flex gap-2">
-          {[["pending", "Chờ duyệt"], ["approved", "Đã duyệt"], ["rejected", "Đã từ chối"]].map(([key, label]) => (
+          {[["pending", "Chờ duyệt"], ["approved", "Đã duyệt"], ["rejected", "Đã từ chối"], ["archived", "Ngừng hoạt động"]].map(([key, label]) => (
             <button key={key} onClick={() => handleFilterChange(key)} className={`px-4 py-2 rounded-md text-sm border ${filter === key ? "bg-primary text-primary-foreground border-primary font-semibold shadow-sm" : "bg-card hover:bg-accent text-muted-foreground"}`}>
               {label}
             </button>
@@ -320,7 +339,7 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
               filteredList.map((room) => {
                 const minPrice = room.prices.length ? Math.min(...room.prices.map(p => p.pricePerNight)) : 0;
                 return (
-                  <tr key={room.id} className="border-t hover:bg-muted/30 transition-colors">
+                  <tr key={room.id} className={`border-t hover:bg-muted/30 transition-colors ${isArchivedRoom(room) ? "opacity-60 bg-slate-50" : ""}`}>
                     <td className="px-4 py-3 font-medium">{room.name}</td>
                     <td className="px-4 py-3">
                       <div>{room.partnerHotelName || "-"}</div>
@@ -331,9 +350,7 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
                     <td className="px-4 py-3" suppressHydrationWarning>{new Date(room.createdAt).toLocaleString("vi-VN")}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase w-fit ${room.status === "approved" ? "bg-green-100 text-green-700" : room.status === "rejected" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
-                          {room.status === "pending" ? "Chờ duyệt" : room.status === "approved" ? "Đã duyệt" : "Từ chối"}
-                        </span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase w-fit ${roomStatusClass(room)}`}>{roomStatusLabel(room)}</span>
                         {room.pendingRequest && (
                           <span className="text-[9px] text-primary font-bold italic">
                             ({requestTypeLabel(room)})
@@ -343,13 +360,13 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
                     </td>
                     <td className="px-4 py-3 space-x-1 whitespace-nowrap text-right">
                       <button onClick={() => setDetail(room)} className="px-2 py-1 text-xs rounded border hover:bg-accent font-medium">Chi tiết</button>
-                      {filter === "pending" && (
+                      {filter === "pending" && !isArchivedRoom(room) && (
                         <>
                           <button onClick={() => approve(room)} className="px-2 py-1 text-xs rounded bg-primary text-primary-foreground font-medium hover:opacity-90">Duyệt</button>
                           <button onClick={() => setReject({ id: room.id, requestId: room.pendingRequest?.id, reason: "" })} className="px-2 py-1 text-xs rounded bg-destructive text-destructive-foreground font-medium hover:opacity-90">Từ chối</button>
                         </>
                       )}
-                      <button onClick={() => removeRoom(room)} className="px-2 py-1 text-xs rounded bg-destructive/10 text-destructive hover:bg-destructive hover:text-white">Xóa</button>
+                      <button onClick={() => removeRoom(room)} disabled={isArchivedRoom(room)} className="px-2 py-1 text-xs rounded bg-destructive/10 text-destructive hover:bg-destructive hover:text-white disabled:opacity-40 disabled:cursor-not-allowed">Ngừng hoạt động</button>
                     </td>
                   </tr>
                 );
@@ -394,7 +411,7 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
                     <button onClick={() => removeRoom(detail)} className="px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground text-sm">Xóa</button>
                   </>
                 )}
-                  {filter === "pending" && (detail.status === "pending" || detail.pendingRequest) && (
+                  {filter === "pending" && !isArchivedRoom(detail) && (detail.status === "pending" || detail.status === "pending_review" || detail.pendingRequest) && (
                   <>
                     <button onClick={() => approve(detail)} className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm">Duyệt</button>
                     <button onClick={() => setReject({ id: detail.id, requestId: detail.pendingRequest?.id, reason: "" })} className="px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground text-sm">Từ chối</button>
@@ -445,7 +462,7 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
                   </div>
                   <div className="p-4 rounded-lg border bg-muted/10 text-center">
                     <div className="text-xs text-muted-foreground uppercase font-semibold mb-1">Trạng thái</div>
-                    <div className="font-bold text-primary">{detail.pendingRequest ? "Đang có yêu cầu" : detail.status}</div>
+                    <div className="font-bold text-primary">{detail.pendingRequest ? "Đang có yêu cầu" : roomStatusLabel(detail)}</div>
                   </div>
                 </div>
 
@@ -738,9 +755,6 @@ function SortIcon({ columnKey, sortConfig }: { columnKey: string, sortConfig: { 
   if (sortConfig?.key !== columnKey) return null;
   return <span className="ml-1 text-primary text-[10px]">{sortConfig.direction === "asc" ? "(Tăng)" : "(Giảm)"}</span>;
 }
-
-
-
 
 
 

@@ -1,25 +1,25 @@
-# 🏛️ GIAI ĐOẠN 1: TỔNG QUAN KIẾN TRÚC & CẤU TRÚC HỆ THỐNG
+﻿# ðŸ›ï¸ GIAI ÄOáº N 1: Tá»”NG QUAN KIáº¾N TRÃšC & Cáº¤U TRÃšC Há»† THá»NG
 
-Chào mừng bạn đến với bài học đầu tiên! Trong tài liệu này, chúng ta sẽ cùng mổ xẻ kiến trúc vĩ mô của dự án **Hotel Booking Platform** mà bạn đang tiếp quản. Việc hiểu rõ mô hình vận hành và luồng dữ liệu sẽ giúp bạn tự tin đọc mã nguồn ở các bước sau mà không sợ bị lạc hướng.
+ChÃ o má»«ng báº¡n Ä‘áº¿n vá»›i bÃ i há»c Ä‘áº§u tiÃªn! Trong tÃ i liá»‡u nÃ y, chÃºng ta sáº½ cÃ¹ng má»• xáº» kiáº¿n trÃºc vÄ© mÃ´ cá»§a dá»± Ã¡n **Hotel Booking Platform** mÃ  báº¡n Ä‘ang tiáº¿p quáº£n. Viá»‡c hiá»ƒu rÃµ mÃ´ hÃ¬nh váº­n hÃ nh vÃ  luá»“ng dá»¯ liá»‡u sáº½ giÃºp báº¡n tá»± tin Ä‘á»c mÃ£ nguá»“n á»Ÿ cÃ¡c bÆ°á»›c sau mÃ  khÃ´ng sá»£ bá»‹ láº¡c hÆ°á»›ng.
 
 ---
 
-## 1. TỔNG QUAN KIẾN TRÚC HỆ THỐNG (System Architecture)
+## 1. Tá»”NG QUAN KIáº¾N TRÃšC Há»† THá»NG (System Architecture)
 
-Hệ thống được thiết kế theo mô hình **Client-Server (Khách - Chủ)** hiện đại với sự phân tách rõ ràng giữa Frontend và Backend. Cụ thể:
+Há»‡ thá»‘ng Ä‘Æ°á»£c thiáº¿t káº¿ theo mÃ´ hÃ¬nh **Client-Server (KhÃ¡ch - Chá»§)** hiá»‡n Ä‘áº¡i vá»›i sá»± phÃ¢n tÃ¡ch rÃµ rÃ ng giá»¯a Frontend vÃ  Backend. Cá»¥ thá»ƒ:
 
-* **Frontend (Monorepo)**: Sử dụng cấu trúc Monorepo quản lý bằng npm workspaces. Toàn bộ mã nguồn ứng dụng client nằm trong thư mục `web`. Nó chứa 3 phân hệ ứng dụng độc lập xây dựng bằng **Vite, React và TypeScript**, chia sẻ chung các thư viện dùng chung (`api-client`, `auth-ui`).
-* **Backend (RESTful API Monolith)**: Xây dựng bằng **Node.js, Express, TypeScript**, tổ chức theo kiến trúc **Domain-Driven Modules** (mỗi thư mục là một nghiệp vụ riêng).
-* **Database (MySQL)**: Hệ quản trị cơ sở dữ liệu quan hệ lưu giữ thông tin đặt phòng, phòng trống, khách hàng và đối tác.
+* **Frontend (Monorepo)**: Sá»­ dá»¥ng cáº¥u trÃºc Monorepo quáº£n lÃ½ báº±ng npm workspaces. ToÃ n bá»™ mÃ£ nguá»“n á»©ng dá»¥ng client náº±m trong thÆ° má»¥c `web`. NÃ³ chá»©a 3 phÃ¢n há»‡ á»©ng dá»¥ng Ä‘á»™c láº­p xÃ¢y dá»±ng báº±ng **Vite, React vÃ  TypeScript**, chia sáº» chung cÃ¡c thÆ° viá»‡n dÃ¹ng chung (`api-client`, `auth-ui`).
+* **Backend (RESTful API Monolith)**: XÃ¢y dá»±ng báº±ng **Node.js, Express, TypeScript**, tá»• chá»©c theo kiáº¿n trÃºc **Domain-Driven Modules** (má»—i thÆ° má»¥c lÃ  má»™t nghiá»‡p vá»¥ riÃªng).
+* **Database (PostgreSQL)**: Há»‡ quáº£n trá»‹ cÆ¡ sá»Ÿ dá»¯ liá»‡u quan há»‡ lÆ°u giá»¯ thÃ´ng tin Ä‘áº·t phÃ²ng, phÃ²ng trá»‘ng, khÃ¡ch hÃ ng vÃ  Ä‘á»‘i tÃ¡c.
 
-### 📊 Sơ đồ Kiến trúc Tổng quan (High-Level Architecture)
+### ðŸ“Š SÆ¡ Ä‘á»“ Kiáº¿n trÃºc Tá»•ng quan (High-Level Architecture)
 
 ```mermaid
 graph TD
-    subgraph Frontend Monorepo [Thư mục: web/]
-        A[apps/customer <br> Khách hàng đặt phòng] 
-        B[apps/partner <br> Đối tác/Khách sạn quản lý]
-        C[apps/admin <br> Quản trị hệ thống]
+    subgraph Frontend Monorepo [ThÆ° má»¥c: web/]
+        A[apps/customer <br> KhÃ¡ch hÃ ng Ä‘áº·t phÃ²ng] 
+        B[apps/partner <br> Äá»‘i tÃ¡c/KhÃ¡ch sáº¡n quáº£n lÃ½]
+        C[apps/admin <br> Quáº£n trá»‹ há»‡ thá»‘ng]
         D[packages/api-client <br> API Client chung]
         E[packages/auth-ui <br> UI Auth chung]
         
@@ -30,18 +30,18 @@ graph TD
         B --> E
     end
 
-    subgraph Express Backend [Thư mục: backend/]
+    subgraph Express Backend [ThÆ° má»¥c: backend/]
         F[backend/src/index.ts <br> HTTP Server]
         G[backend/src/middleware/ <br> CORS, Auth, Logger]
-        H[backend/src/modules/ <br> Logic nghiệp vụ từng domain]
+        H[backend/src/modules/ <br> Logic nghiá»‡p vá»¥ tá»«ng domain]
         
         D -- REST API Requests --> F
         F --> G --> H
     end
 
-    subgraph Database Layer [Thư mục: database/]
-        I[(MySQL Database)]
-        H -- mysql2 driver --> I
+    subgraph Database Layer [ThÆ° má»¥c: database/]
+        I[(PostgreSQL Database)]
+        H -- Prisma PostgreSQL client --> I
     end
 
     style Frontend Monorepo fill:#e0f2fe,stroke:#0284c7,stroke-width:2px
@@ -51,131 +51,132 @@ graph TD
 
 ---
 
-## 2. GIẢI THÍCH CẤU TRÚC THƯ MỤC TIÊU CHUẨN
+## 2. GIáº¢I THÃCH Cáº¤U TRÃšC THÆ¯ Má»¤C TIÃŠU CHUáº¨N
 
-Dưới đây là sơ đồ cấu trúc thư mục cốt lõi của dự án và ý nghĩa cụ thể của từng phần để bạn dễ dàng định vị file cần đọc:
+DÆ°á»›i Ä‘Ã¢y lÃ  sÆ¡ Ä‘á»“ cáº¥u trÃºc thÆ° má»¥c cá»‘t lÃµi cá»§a dá»± Ã¡n vÃ  Ã½ nghÄ©a cá»¥ thá»ƒ cá»§a tá»«ng pháº§n Ä‘á»ƒ báº¡n dá»… dÃ ng Ä‘á»‹nh vá»‹ file cáº§n Ä‘á»c:
 
-### 📂 A. Cấu trúc Frontend Monorepo (`web/`)
-Thư mục `web/` áp dụng mô hình **Monorepo** (Nhiều ứng dụng trong một Repository). Điều này cho phép 3 ứng dụng giao diện chia sẻ code logic rất tiện lợi.
-* 📁 **`apps/customer`**: Ứng dụng React dành cho khách hàng tìm kiếm phòng, đặt phòng và quản lý lịch đặt phòng của mình.
-* 📁 **`apps/partner`**: Ứng dụng dành cho chủ khách sạn (đối tác) đăng ký phòng, quản lý phòng trống, xem doanh thu và xác nhận đơn đặt phòng.
-* 📁 **`apps/admin`**: Ứng dụng dành cho quản trị viên hệ thống để phê duyệt đối tác mới, kiểm duyệt khách sạn, xem báo cáo toàn hệ thống và xử lý tranh chấp.
-* 📁 **`packages/api-client`**: SDK dùng chung do chính dự án xây dựng để đóng gói các API endpoints của backend. Nhờ đó, cả 3 app trên đều gọi API một cách thống nhất thông qua package này.
-* 📁 **`packages/auth-ui`**: Chứa các component giao diện đăng ký, đăng nhập và phân quyền dùng chung.
+### ðŸ“‚ A. Cáº¥u trÃºc Frontend Monorepo (`web/`)
+ThÆ° má»¥c `web/` Ã¡p dá»¥ng mÃ´ hÃ¬nh **Monorepo** (Nhiá»u á»©ng dá»¥ng trong má»™t Repository). Äiá»u nÃ y cho phÃ©p 3 á»©ng dá»¥ng giao diá»‡n chia sáº» code logic ráº¥t tiá»‡n lá»£i.
+* ðŸ“ **`apps/customer`**: á»¨ng dá»¥ng React dÃ nh cho khÃ¡ch hÃ ng tÃ¬m kiáº¿m phÃ²ng, Ä‘áº·t phÃ²ng vÃ  quáº£n lÃ½ lá»‹ch Ä‘áº·t phÃ²ng cá»§a mÃ¬nh.
+* ðŸ“ **`apps/partner`**: á»¨ng dá»¥ng dÃ nh cho chá»§ khÃ¡ch sáº¡n (Ä‘á»‘i tÃ¡c) Ä‘Äƒng kÃ½ phÃ²ng, quáº£n lÃ½ phÃ²ng trá»‘ng, xem doanh thu vÃ  xÃ¡c nháº­n Ä‘Æ¡n Ä‘áº·t phÃ²ng.
+* ðŸ“ **`apps/admin`**: á»¨ng dá»¥ng dÃ nh cho quáº£n trá»‹ viÃªn há»‡ thá»‘ng Ä‘á»ƒ phÃª duyá»‡t Ä‘á»‘i tÃ¡c má»›i, kiá»ƒm duyá»‡t khÃ¡ch sáº¡n, xem bÃ¡o cÃ¡o toÃ n há»‡ thá»‘ng vÃ  xá»­ lÃ½ tranh cháº¥p.
+* ðŸ“ **`packages/api-client`**: SDK dÃ¹ng chung do chÃ­nh dá»± Ã¡n xÃ¢y dá»±ng Ä‘á»ƒ Ä‘Ã³ng gÃ³i cÃ¡c API endpoints cá»§a backend. Nhá» Ä‘Ã³, cáº£ 3 app trÃªn Ä‘á»u gá»i API má»™t cÃ¡ch thá»‘ng nháº¥t thÃ´ng qua package nÃ y.
+* ðŸ“ **`packages/auth-ui`**: Chá»©a cÃ¡c component giao diá»‡n Ä‘Äƒng kÃ½, Ä‘Äƒng nháº­p vÃ  phÃ¢n quyá»n dÃ¹ng chung.
 
-### 📂 B. Cấu trúc Backend (`backend/`)
-Thư mục `backend/` được tổ chức theo cấu trúc **Domain-Driven** rất khoa học và dễ mở rộng.
-* 📁 **`src/config`**: Chứa các tệp cấu hình môi trường, thông số kết nối Database, JWT token và các biến môi trường khác.
-* 📁 **`src/database`**: Nơi khởi tạo kết nối cơ sở dữ liệu (`db.ts`) và xử lý các bản vá/migration (`databaseBootstrap.ts`, `databasePatches.ts`).
-* 📁 **`src/middleware`**: Các bộ lọc trung gian xử lý Request trước khi vào Logic chính:
-  * Xác thực người dùng (Authentication Middleware).
-  * Phân quyền (Authorization: Admin, Partner, Customer).
-  * Ghi log request (Sử dụng `pino` & `pino-http`).
-  * Xử lý lỗi tập trung (Global Error Handler).
-* 📁 **`src/validation`**: Các schema định nghĩa kiểu dữ liệu và ràng buộc đầu vào (Sử dụng thư viện `zod`).
-* 📁 **`src/modules`**: **Đây chính là Trái Tim chứa Logic nghiệp vụ cốt lõi của Backend!** Mỗi thư mục con đại diện cho một phân hệ nghiệp vụ:
-  * `auth/`: Đăng nhập, đăng ký, đăng xuất, cấp quyền.
-  * `hotels/`: Quản lý danh sách khách sạn, phòng, loại phòng.
-  * `bookings/`: Xử lý đặt phòng, hủy phòng, trạng thái đơn hàng.
-  * `payments/`: Xích nối cổng thanh toán, cập nhật trạng thái thanh toán.
-  * `notifications/`: Gửi thông báo real-time tới người dùng và đối tác khi có sự kiện đặt phòng.
-  * *Mỗi module sẽ chứa file định nghĩa API Route (ví dụ: `bookings.routes.ts`) và Service chứa các truy vấn SQL trực tiếp hoặc logic xử lý (ví dụ: `bookings.service.js`).*
+### ðŸ“‚ B. Cáº¥u trÃºc Backend (`backend/`)
+ThÆ° má»¥c `backend/` Ä‘Æ°á»£c tá»• chá»©c theo cáº¥u trÃºc **Domain-Driven** ráº¥t khoa há»c vÃ  dá»… má»Ÿ rá»™ng.
+* ðŸ“ **`src/config`**: Chá»©a cÃ¡c tá»‡p cáº¥u hÃ¬nh mÃ´i trÆ°á»ng, thÃ´ng sá»‘ káº¿t ná»‘i Database, JWT token vÃ  cÃ¡c biáº¿n mÃ´i trÆ°á»ng khÃ¡c.
+* ðŸ“ **`src/database`**: NÆ¡i khá»Ÿi táº¡o káº¿t ná»‘i cÆ¡ sá»Ÿ dá»¯ liá»‡u (`db.ts`) vÃ  xá»­ lÃ½ cÃ¡c báº£n vÃ¡/migration (`databaseBootstrap.ts`, `databasePatches.ts`).
+* ðŸ“ **`src/middleware`**: CÃ¡c bá»™ lá»c trung gian xá»­ lÃ½ Request trÆ°á»›c khi vÃ o Logic chÃ­nh:
+  * XÃ¡c thá»±c ngÆ°á»i dÃ¹ng (Authentication Middleware).
+  * PhÃ¢n quyá»n (Authorization: Admin, Partner, Customer).
+  * Ghi log request (Sá»­ dá»¥ng `pino` & `pino-http`).
+  * Xá»­ lÃ½ lá»—i táº­p trung (Global Error Handler).
+* ðŸ“ **`src/validation`**: CÃ¡c schema Ä‘á»‹nh nghÄ©a kiá»ƒu dá»¯ liá»‡u vÃ  rÃ ng buá»™c Ä‘áº§u vÃ o (Sá»­ dá»¥ng thÆ° viá»‡n `zod`).
+* ðŸ“ **`src/modules`**: **ÄÃ¢y chÃ­nh lÃ  TrÃ¡i Tim chá»©a Logic nghiá»‡p vá»¥ cá»‘t lÃµi cá»§a Backend!** Má»—i thÆ° má»¥c con Ä‘áº¡i diá»‡n cho má»™t phÃ¢n há»‡ nghiá»‡p vá»¥:
+  * `auth/`: ÄÄƒng nháº­p, Ä‘Äƒng kÃ½, Ä‘Äƒng xuáº¥t, cáº¥p quyá»n.
+  * `hotels/`: Quáº£n lÃ½ danh sÃ¡ch khÃ¡ch sáº¡n, phÃ²ng, loáº¡i phÃ²ng.
+  * `bookings/`: Xá»­ lÃ½ Ä‘áº·t phÃ²ng, há»§y phÃ²ng, tráº¡ng thÃ¡i Ä‘Æ¡n hÃ ng.
+  * `payments/`: XÃ­ch ná»‘i cá»•ng thanh toÃ¡n, cáº­p nháº­t tráº¡ng thÃ¡i thanh toÃ¡n.
+  * `notifications/`: Gá»­i thÃ´ng bÃ¡o real-time tá»›i ngÆ°á»i dÃ¹ng vÃ  Ä‘á»‘i tÃ¡c khi cÃ³ sá»± kiá»‡n Ä‘áº·t phÃ²ng.
+  * *Má»—i module sáº½ chá»©a file Ä‘á»‹nh nghÄ©a API Route (vÃ­ dá»¥: `bookings.routes.ts`) vÃ  Service chá»©a cÃ¡c truy váº¥n SQL trá»±c tiáº¿p hoáº·c logic xá»­ lÃ½ (vÃ­ dá»¥: `bookings.service.js`).*
 
 ---
 
-## 3. LUỒNG DỮ LIỆU ĐẶT PHÒNG THỰC TẾ (Booking Data Flow)
+## 3. LUá»’NG Dá»® LIá»†U Äáº¶T PHÃ’NG THá»°C Táº¾ (Booking Data Flow)
 
-Để giúp bạn hình dung cách các thành phần trên phối hợp với nhau, đây là sơ đồ tuần tự (Sequence Diagram) mô tả toàn bộ luồng đi từ khi khách hàng tìm kiếm cho đến lúc đặt phòng thành công:
+Äá»ƒ giÃºp báº¡n hÃ¬nh dung cÃ¡ch cÃ¡c thÃ nh pháº§n trÃªn phá»‘i há»£p vá»›i nhau, Ä‘Ã¢y lÃ  sÆ¡ Ä‘á»“ tuáº§n tá»± (Sequence Diagram) mÃ´ táº£ toÃ n bá»™ luá»“ng Ä‘i tá»« khi khÃ¡ch hÃ ng tÃ¬m kiáº¿m cho Ä‘áº¿n lÃºc Ä‘áº·t phÃ²ng thÃ nh cÃ´ng:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Customer as 👤 Khách hàng
-    participant AppCust as 📱 apps/customer
-    participant APIClient as 📦 packages/api-client
-    participant BE as ⚙️ Express Backend (bookings.routes)
-    participant BEService as 🧠 Bookings Service
-    participant DB as 🗄️ MySQL Database
-    participant PartnerApp as 🏨 apps/partner (Chủ khách sạn)
+    actor Customer as ðŸ‘¤ KhÃ¡ch hÃ ng
+    participant AppCust as ðŸ“± apps/customer
+    participant APIClient as ðŸ“¦ packages/api-client
+    participant BE as âš™ï¸ Express Backend (bookings.routes)
+    participant BEService as ðŸ§  Bookings Service
+    participant DB as ðŸ—„ï¸ PostgreSQL Database
+    participant PartnerApp as ðŸ¨ apps/partner (Chá»§ khÃ¡ch sáº¡n)
 
-    %% 1. TÌM KIẾM PHÒNG
-    Note over Customer, DB: Bước 1: Tìm kiếm & Lọc phòng trống
-    Customer->>AppCust: Nhập điểm đến, Check-in, Check-out, Số khách
-    AppCust->>APIClient: Gọi API lấy danh sách phòng trống
+    %% 1. TÃŒM KIáº¾M PHÃ’NG
+    Note over Customer, DB: BÆ°á»›c 1: TÃ¬m kiáº¿m & Lá»c phÃ²ng trá»‘ng
+    Customer->>AppCust: Nháº­p Ä‘iá»ƒm Ä‘áº¿n, Check-in, Check-out, Sá»‘ khÃ¡ch
+    AppCust->>APIClient: Gá»i API láº¥y danh sÃ¡ch phÃ²ng trá»‘ng
     APIClient->>BE: GET /api/hotels/available?checkIn=...&checkOut=...
-    BE->>DB: Truy vấn SELECT loại phòng trống trong khoảng ngày
-    DB-->>BE: Trả về danh sách RoomTypes khả dụng
-    BE-->>APIClient: JSON data (Khách sạn + Loại phòng trống)
-    APIClient-->>AppCust: Render UI danh sách khách sạn
-    AppCust-->>Customer: Hiển thị giao diện danh sách phòng đẹp mắt
+    BE->>DB: Truy váº¥n SELECT loáº¡i phÃ²ng trá»‘ng trong khoáº£ng ngÃ y
+    DB-->>BE: Tráº£ vá» danh sÃ¡ch RoomTypes kháº£ dá»¥ng
+    BE-->>APIClient: JSON data (KhÃ¡ch sáº¡n + Loáº¡i phÃ²ng trá»‘ng)
+    APIClient-->>AppCust: Render UI danh sÃ¡ch khÃ¡ch sáº¡n
+    AppCust-->>Customer: Hiá»ƒn thá»‹ giao diá»‡n danh sÃ¡ch phÃ²ng Ä‘áº¹p máº¯t
 
-    %% 2. CHỌN PHÒNG & XEM CHI TIẾT
-    Note over Customer, DB: Bước 2: Xem chi tiết & Nhập thông tin
-    Customer->>AppCust: Click chọn một Khách sạn & Loại phòng cụ thể
+    %% 2. CHá»ŒN PHÃ’NG & XEM CHI TIáº¾T
+    Note over Customer, DB: BÆ°á»›c 2: Xem chi tiáº¿t & Nháº­p thÃ´ng tin
+    Customer->>AppCust: Click chá»n má»™t KhÃ¡ch sáº¡n & Loáº¡i phÃ²ng cá»¥ thá»ƒ
     AppCust->>APIClient: GET /api/hotels/:id/details
-    APIClient->>BE: Gọi backend lấy chi tiết giá phòng và mô tả
-    BE->>DB: Query chi tiết khách sạn & các phòng thực tế
-    DB-->>BE: Dữ liệu chi tiết
-    BE-->>AppCust: JSON chi tiết
-    AppCust-->>Customer: Hiển thị trang thanh toán và điền thông tin khách đặt
+    APIClient->>BE: Gá»i backend láº¥y chi tiáº¿t giÃ¡ phÃ²ng vÃ  mÃ´ táº£
+    BE->>DB: Query chi tiáº¿t khÃ¡ch sáº¡n & cÃ¡c phÃ²ng thá»±c táº¿
+    DB-->>BE: Dá»¯ liá»‡u chi tiáº¿t
+    BE-->>AppCust: JSON chi tiáº¿t
+    AppCust-->>Customer: Hiá»ƒn thá»‹ trang thanh toÃ¡n vÃ  Ä‘iá»n thÃ´ng tin khÃ¡ch Ä‘áº·t
 
-    %% 3. BẤM ĐẶT PHÒNG
-    Note over Customer, DB: Bước 3: Gửi yêu cầu đặt phòng (Hành động WRITE cực kỳ quan trọng)
-    Customer->>AppCust: Click "Xác nhận đặt phòng"
-    AppCust->>APIClient: POST /api/bookings (Kèm checkIn, checkOut, roomTypeId)
+    %% 3. Báº¤M Äáº¶T PHÃ’NG
+    Note over Customer, DB: BÆ°á»›c 3: Gá»­i yÃªu cáº§u Ä‘áº·t phÃ²ng (HÃ nh Ä‘á»™ng WRITE cá»±c ká»³ quan trá»ng)
+    Customer->>AppCust: Click "XÃ¡c nháº­n Ä‘áº·t phÃ²ng"
+    AppCust->>APIClient: POST /api/bookings (KÃ¨m checkIn, checkOut, roomTypeId)
     APIClient->>BE: POST /api/bookings Request
     
-    %% 4. XỬ LÝ BACKEND (LOGIC CORE)
+    %% 4. Xá»¬ LÃ BACKEND (LOGIC CORE)
     rect rgb(240, 253, 244)
-        Note over BE, DB: Xử lý Transaction & Lock để chống trùng lặp (Concurrency)
-        BE->>BEService: Gọi hàm service đặt phòng
-        BEService->>DB: Bắt đầu TRANSACTION (START TRANSACTION)
-        BEService->>DB: Kiểm tra lại phòng trống & LOCK bản ghi (SELECT ... FOR UPDATE)
-        alt Phòng còn trống
+        Note over BE, DB: Xá»­ lÃ½ Transaction & Lock Ä‘á»ƒ chá»‘ng trÃ¹ng láº·p (Concurrency)
+        BE->>BEService: Gá»i hÃ m service Ä‘áº·t phÃ²ng
+        BEService->>DB: Báº¯t Ä‘áº§u TRANSACTION (START TRANSACTION)
+        BEService->>DB: Kiá»ƒm tra láº¡i phÃ²ng trá»‘ng & LOCK báº£n ghi (SELECT ... FOR UPDATE)
+        alt PhÃ²ng cÃ²n trá»‘ng
             BEService->>DB: INSERT INTO bookings (...)
-            BEService->>DB: INSERT INTO room_occupancies (Đánh dấu phòng đã bị chiếm ngày đó)
+            BEService->>DB: INSERT INTO room_occupancies (ÄÃ¡nh dáº¥u phÃ²ng Ä‘Ã£ bá»‹ chiáº¿m ngÃ y Ä‘Ã³)
             BEService->>DB: COMMIT TRANSACTION
-            DB-->>BEService: Thành công
-        else Phòng đã bị người khác đặt mất (Race Condition)
+            DB-->>BEService: ThÃ nh cÃ´ng
+        else PhÃ²ng Ä‘Ã£ bá»‹ ngÆ°á»i khÃ¡c Ä‘áº·t máº¥t (Race Condition)
             BEService->>DB: ROLLBACK TRANSACTION
-            BEService-->>BE: Ném lỗi "Room Not Available"
+            BEService-->>BE: NÃ©m lá»—i "Room Not Available"
         end
     end
 
-    %% 5. XÁC NHẬN & THÔNG BÁO
-    alt Đặt phòng thành công
-        BEService-->>BE: Trả về đối tượng Booking đã tạo
+    %% 5. XÃC NHáº¬N & THÃ”NG BÃO
+    alt Äáº·t phÃ²ng thÃ nh cÃ´ng
+        BEService-->>BE: Tráº£ vá» Ä‘á»‘i tÆ°á»£ng Booking Ä‘Ã£ táº¡o
         BE-->>APIClient: HTTP 201 Created (Booking details)
-        APIClient-->>AppCust: Đặt phòng thành công!
-        AppCust-->>Customer: Hiển thị màn hình "Đặt phòng thành công! 🎉"
-        BE-)PartnerApp: Gửi thông báo Real-time (Socket/Notification) báo có đơn đặt phòng mới
-    else Thất bại
+        APIClient-->>AppCust: Äáº·t phÃ²ng thÃ nh cÃ´ng!
+        AppCust-->>Customer: Hiá»ƒn thá»‹ mÃ n hÃ¬nh "Äáº·t phÃ²ng thÃ nh cÃ´ng! ðŸŽ‰"
+        BE-)PartnerApp: Gá»­i thÃ´ng bÃ¡o Real-time (Socket/Notification) bÃ¡o cÃ³ Ä‘Æ¡n Ä‘áº·t phÃ²ng má»›i
+    else Tháº¥t báº¡i
         BE-->>APIClient: HTTP 400 Bad Request / 409 Conflict
-        APIClient-->>AppCust: Báo lỗi phòng đã được đặt
-        AppCust-->>Customer: Hiển thị: "Rất tiếc, phòng vừa được đặt bởi khách khác."
+        APIClient-->>AppCust: BÃ¡o lá»—i phÃ²ng Ä‘Ã£ Ä‘Æ°á»£c Ä‘áº·t
+        AppCust-->>Customer: Hiá»ƒn thá»‹: "Ráº¥t tiáº¿c, phÃ²ng vá»«a Ä‘Æ°á»£c Ä‘áº·t bá»Ÿi khÃ¡ch khÃ¡c."
     end
 ```
 
 ---
 
-## 💡 NHỮNG FILE CỐT LÕI BẠN CẦN CHÚ Ý LÚC NÀY
-Khi bắt đầu khám phá, hãy định vị ngay các file cốt lõi sau để hiểu toàn bộ logic nghiệp vụ (hãy click vào link để xem):
+## ðŸ’¡ NHá»®NG FILE Cá»T LÃ•I Báº N Cáº¦N CHÃš Ã LÃšC NÃ€Y
+Khi báº¯t Ä‘áº§u khÃ¡m phÃ¡, hÃ£y Ä‘á»‹nh vá»‹ ngay cÃ¡c file cá»‘t lÃµi sau Ä‘á»ƒ hiá»ƒu toÃ n bá»™ logic nghiá»‡p vá»¥ (hÃ£y click vÃ o link Ä‘á»ƒ xem):
 
-1. **Backend Server Setup**: [backend/src/index.ts](../backend/src/index.ts) - Nơi cấu hình Express, Middleware, kết nối cổng và khởi chạy server.
-2. **Database Connector**: [backend/src/db.ts](../backend/src/db.ts) (hoặc nằm trong `src/database/db.ts`) - Cấu hình connection pool MySQL.
+1. **Backend Server Setup**: [backend/src/index.ts](../backend/src/index.ts) - NÆ¡i cáº¥u hÃ¬nh Express, Middleware, káº¿t ná»‘i cá»•ng vÃ  khá»Ÿi cháº¡y server.
+2. **Database Connector**: [backend/src/db.ts](../backend/src/db.ts) (hoáº·c náº±m trong `src/database/db.ts`) - Cáº¥u hÃ¬nh connection pool PostgreSQL.
 3. **Core API Routes & Services cho Bookings**:
-   * API Endpoints: [backend/src/modules/bookings/bookings.routes.ts](../backend/src/modules/bookings/bookings.routes.ts) - Nơi định nghĩa các API như POST `/`, GET `/customer`, v.v.
-   * Query logic: [backend/src/modules/bookings/bookings.service.js](../backend/src/modules/bookings/bookings.service.js) - Nơi chứa truy vấn SQL kiểm tra phòng trống và ghi nhận booking vào Database.
-4. **Shared API SDK**: [web/packages/api-client/](../web/packages/api-client/) - Cầu nối trung gian gọi từ Client lên Server.
+   * API Endpoints: [backend/src/modules/bookings/bookings.routes.ts](../backend/src/modules/bookings/bookings.routes.ts) - NÆ¡i Ä‘á»‹nh nghÄ©a cÃ¡c API nhÆ° POST `/`, GET `/customer`, v.v.
+   * Query logic: [backend/src/modules/bookings/bookings.service.js](../backend/src/modules/bookings/bookings.service.js) - NÆ¡i chá»©a truy váº¥n SQL kiá»ƒm tra phÃ²ng trá»‘ng vÃ  ghi nháº­n booking vÃ o Database.
+4. **Shared API SDK**: [web/packages/api-client/](../web/packages/api-client/) - Cáº§u ná»‘i trung gian gá»i tá»« Client lÃªn Server.
 
 ---
 
-## 🙋 CÂU HỎI THẢO LUẬN & BƯỚC TIẾP THEO
+## ðŸ™‹ CÃ‚U Há»ŽI THáº¢O LUáº¬N & BÆ¯á»šC TIáº¾P THEO
 
-Tôi hy vọng tài liệu trực quan này đã giúp bạn hình dung được bức tranh toàn cảnh một cách sắc nét nhất!
+TÃ´i hy vá»ng tÃ i liá»‡u trá»±c quan nÃ y Ä‘Ã£ giÃºp báº¡n hÃ¬nh dung Ä‘Æ°á»£c bá»©c tranh toÃ n cáº£nh má»™t cÃ¡ch sáº¯c nÃ©t nháº¥t!
 
-**Để chúng ta chuyển sang Giai đoạn 2: CƠ SỞ DỮ LIỆU & MÔ HÌNH DỮ LIỆU, bạn hãy gửi cho tôi:**
-1. Cấu trúc bảng (schema) trong file SQL của dự án (ví dụ file `backend/schema.sql` hoặc tệp tương đương).
-2. Hoặc mô tả nhanh các bảng dữ liệu nếu bạn có sẵn.
+**Äá»ƒ chÃºng ta chuyá»ƒn sang Giai Ä‘oáº¡n 2: CÆ  Sá»ž Dá»® LIá»†U & MÃ” HÃŒNH Dá»® LIá»†U, báº¡n hÃ£y gá»­i cho tÃ´i:**
+1. Cáº¥u trÃºc báº£ng (schema) trong file SQL cá»§a dá»± Ã¡n (vÃ­ dá»¥ file `backend/schema.sql` hoáº·c tá»‡p tÆ°Æ¡ng Ä‘Æ°Æ¡ng).
+2. Hoáº·c mÃ´ táº£ nhanh cÃ¡c báº£ng dá»¯ liá»‡u náº¿u báº¡n cÃ³ sáºµn.
 
-*Tôi đang ở đây để đồng hành cùng bạn. Khi bạn sẵn sàng, hãy phản hồi và chúng ta sẽ tiến tới giai đoạn tiếp theo để giải mã cấu trúc dữ liệu!*
+*TÃ´i Ä‘ang á»Ÿ Ä‘Ã¢y Ä‘á»ƒ Ä‘á»“ng hÃ nh cÃ¹ng báº¡n. Khi báº¡n sáºµn sÃ ng, hÃ£y pháº£n há»“i vÃ  chÃºng ta sáº½ tiáº¿n tá»›i giai Ä‘oáº¡n tiáº¿p theo Ä‘á»ƒ giáº£i mÃ£ cáº¥u trÃºc dá»¯ liá»‡u!*
+

@@ -2,9 +2,9 @@
 
 Tai lieu nay dinh nghia cac quy tac cot loi cho du an Nowayhome.
 
-## 1. BACKEND (EXPRESS.JS + MYSQL)
+## 1. BACKEND (NESTJS + POSTGRESQL)
 
-* **Database baseline**: `database/3.8.sql` la file schema/data goc da import vao MySQL. Khong sua file nay sau khi da chay.
+* **Database baseline**: schema chuan nam trong `backend/prisma/schema.prisma`; snapshot data nguon cu duoc migrate bang `database/migration/migrate-legacy-snapshot.mjs`.
 * **Database patches**: moi thay doi bo sung schema/data phai dat trong `database/patches/*.sql`.
   * Chay patch: `pnpm migrate`
   * App startup cung tu dong chay cac patch trong `database/patches`.

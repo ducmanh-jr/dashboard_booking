@@ -35,6 +35,12 @@ export const requestDeleteRoom = async (id: string | number) => {
   });
 };
 
+export const requestRestoreRoom = async (id: string | number) => {
+  return await api(`/partner/rooms/${id}/request-restore`, {
+    method: "POST",
+  });
+};
+
 export const requestUpdateRoom = async (id: string | number, data: any) => {
   return await api(`/partner/rooms/${id}/request-update`, {
     method: "PATCH",

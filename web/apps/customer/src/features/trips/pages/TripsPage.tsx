@@ -5,6 +5,18 @@ import { Booking, User } from "@/shared/types";
 import { fmtDate, fmtVnd } from "@/shared/utils/format";
 import { QRCodeSVG } from "qrcode.react";
 
+function todayKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateKey(value: string) {
+  return String(value || "").slice(0, 10);
+}
+
 export function TripsPage({ user }: { user: User | null }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,10 +71,12 @@ export function TripsPage({ user }: { user: User | null }) {
   if (!user) return <Navigate to="/login?next=/trips" replace />;
   if (loading) return <div className="max-w-6xl mx-auto px-4 py-10 text-muted-foreground animate-pulse">Đang tải chuyến đi...</div>;
 
+  const today = todayKey();
   const filtered = mounted ? bookings.filter(b => {
+    const checkOut = dateKey(b.checkOutDate);
     if (activeTab === "cancelled") return b.status === "cancelled";
-    if (activeTab === "completed") return b.status === "checked_out" || (b.status === "confirmed" && new Date(b.checkOutDate) < new Date());
-    return b.status !== "cancelled" && (b.status === "pending" || b.status === "confirmed" || b.status === "checked_in") && new Date(b.checkOutDate) >= new Date();
+    if (activeTab === "completed") return b.status === "checked_out" || (b.status === "confirmed" && checkOut <= today);
+    return b.status !== "cancelled" && (b.status === "pending" || b.status === "confirmed" || b.status === "checked_in") && checkOut > today;
   }) : [];
 
   const getStatusInfo = (status: string) => {
@@ -114,7 +128,7 @@ export function TripsPage({ user }: { user: User | null }) {
               <div
                 key={booking.id}
                 onClick={() => setSelected(booking)}
-                className="group relative bg-card border rounded-2xl p-5 cursor-pointer hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300"
+                className={`group relative bg-card border rounded-2xl p-5 cursor-pointer hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 ${booking.propertyIsArchived ? "opacity-60 bg-slate-50" : ""}`}
               >
                 <div className="flex flex-col sm:flex-row gap-5">
                   <div className="w-full sm:w-32 h-24 bg-muted rounded-xl overflow-hidden flex-shrink-0 border">
@@ -132,7 +146,14 @@ export function TripsPage({ user }: { user: User | null }) {
                         {status.icon} {status.label}
                       </span>
                     </div>
-                    <h3 className="text-lg font-bold truncate group-hover:text-primary transition-colors">{booking.propertyName}</h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-bold truncate group-hover:text-primary transition-colors">{booking.propertyName}</h3>
+                      {booking.propertyIsArchived && (
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">
+                          Khách sạn đã ngừng hoạt động
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground truncate">{booking.address}</p>
                     
                     <div className="flex items-center gap-4 pt-2 text-xs font-medium">

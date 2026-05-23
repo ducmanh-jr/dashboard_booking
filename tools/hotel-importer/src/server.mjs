@@ -356,7 +356,10 @@ function applySavedSqlToDataSql() {
 }
 
 function withPartnerId(sqlText, partnerId) {
-  return String(sqlText || "").replace(/SET @partner_id := \d+;/g, `SET @partner_id := ${Number(partnerId)};`);
+  const id = Number(partnerId);
+  return String(sqlText || "")
+    .replace(/-- importer_partner_id: \d+/g, `-- importer_partner_id: ${id}`)
+    .replace(/partner_profiles WHERE id = \d+/g, `partner_profiles WHERE id = ${id}`);
 }
 
 async function readSavedSummary() {
@@ -365,7 +368,7 @@ async function readSavedSummary() {
   const sqlText = await fs.readFile(sqlPath, "utf8").catch(() => "");
   const sqlStat = await fs.stat(sqlPath).catch(() => null);
   return {
-    savedHotels: (sqlText.match(/SET @property_slug :=/g) || []).length,
+    savedHotels: (sqlText.match(/-- Row \d+:/g) || []).length,
     savePackages: 1,
     applySqlPath: sqlPath,
     inputPath: null,

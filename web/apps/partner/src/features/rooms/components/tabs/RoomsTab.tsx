@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchRooms, requestDeleteRoom, fetchAvailability, updateAvailability, bulkUpdateAvailability } from "../../../../api/roomsApi";
+import { fetchRooms, requestDeleteRoom, requestRestoreRoom, fetchAvailability, updateAvailability, bulkUpdateAvailability } from "../../../../api/roomsApi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Room } from "../../../../shared/types";
 
-type StatusFilter = "all" | "approved" | "pending" | "rejected" | "request";
+type StatusFilter = "all" | "approved" | "pending" | "rejected" | "archived" | "request";
 
 type AvailabilityDay = {
   date: string;
@@ -50,7 +50,14 @@ function fmtVnd(value: number) {
   return `${Math.round(value || 0).toLocaleString("vi-VN")} đ`;
 }
 
+function isArchivedRoom(room: Room) {
+  return room.isArchived || room.status === "suspended" || room.status === "archived";
+}
+
 function statusLabel(status: string) {
+  if (status === "suspended" || status === "archived") return "Đã lưu trữ";
+  if (status === "active") return "Đã duyệt";
+  if (status === "pending_review") return "Chờ duyệt";
   if (status === "approved") return "Đã duyệt";
   if (status === "rejected") return "Từ chối";
   return "Chờ duyệt";
@@ -64,12 +71,14 @@ function requestLabel(request: Room["pendingRequest"]) {
 }
 
 function statusClass(status: string) {
-  if (status === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "suspended" || status === "archived") return "border-slate-200 bg-slate-50 text-slate-600";
+  if (status === "active" || status === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (status === "rejected") return "border-red-200 bg-red-50 text-red-700";
   return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
 function filterLabel(filter: StatusFilter) {
+  if (filter === "archived") return "Đã lưu trữ";
   if (filter === "approved") return "Đã duyệt";
   if (filter === "pending") return "Chờ duyệt";
   if (filter === "rejected") return "Từ chối";
@@ -124,11 +133,23 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
     }
   }
 
+  async function requestRestore(room: Room) {
+    if (!confirm(`Gửi yêu cầu khôi phục khách sạn "${room.name}" cho admin duyệt?`)) return;
+    try {
+      await requestRestoreRoom(room.id);
+      setMessage(`Đã gửi yêu cầu khôi phục khách sạn "${room.name}" chờ admin duyệt.`);
+      await loadRooms(false);
+    } catch (error: any) {
+      alert(error.message);
+    }
+  }
+
   const stats = useMemo(() => {
-    const approved = rooms.filter((room) => room.status === "approved").length;
-    const pending = rooms.filter((room) => room.status !== "approved").length;
+    const approved = rooms.filter((room) => room.status === "approved" || room.status === "active").length;
+    const archived = rooms.filter(isArchivedRoom).length;
+    const pending = rooms.filter((room) => !isArchivedRoom(room) && !["approved", "active"].includes(room.status)).length;
     const pendingRequests = rooms.filter((room) => room.pendingRequest).length;
-    return { approved, pending, pendingRequests, total: rooms.length };
+    return { approved, pending, pendingRequests, archived, total: rooms.length };
   }, [rooms]);
 
   const filteredRooms = useMemo(() => {
@@ -138,7 +159,8 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
       const matchesFilter =
         filter === "all" ||
         (filter === "request" && !!room.pendingRequest) ||
-        (filter !== "request" && room.status === filter);
+        (filter === "archived" && isArchivedRoom(room)) ||
+        (filter !== "request" && filter !== "archived" && (room.status === filter || (filter === "approved" && room.status === "active") || (filter === "pending" && room.status === "pending_review")));
       return matchesSearch && matchesFilter;
     });
   }, [rooms, search, filter]);
@@ -198,7 +220,7 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
           </div>
 
           <div className="flex gap-0.5 overflow-x-auto rounded-lg border border-slate-200/50 bg-slate-100 p-0.5 shadow-inner">
-            {(["all", "approved", "pending", "rejected", "request"] as StatusFilter[]).map((item) => (
+            {(["all", "approved", "pending", "rejected", "archived", "request"] as StatusFilter[]).map((item) => (
               <button
                 key={item}
                 type="button"
@@ -246,7 +268,7 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
                 key={room.id}
                 className={cn(
                   "overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:border-primary/40 hover:shadow-md flex flex-col sm:flex-row sm:items-stretch",
-                  room.pendingRequest?.action === "delete" && "opacity-80"
+                  (room.pendingRequest?.action === "delete" || isArchivedRoom(room)) && "opacity-60 bg-slate-50"
                 )}
               >
                 <button
@@ -295,6 +317,11 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
                         Ghi chú admin: {room.pendingRequest.note}
                       </div>
                     )}
+                    {isArchivedRoom(room) && (
+                      <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-medium text-slate-600">
+                        Khách sạn đã ngừng hoạt động. Bạn chỉ có thể xem lịch sử, không thể mở bán hoặc chỉnh tồn kho.
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-1 border-t pt-2.5 lg:w-[108px] lg:flex-col lg:items-stretch lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0 lg:border-slate-100/80">
@@ -308,6 +335,7 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
                     <button
                       type="button"
                       onClick={() => setAvailabilityRoom(room)}
+                      disabled={isArchivedRoom(room)}
                       className="rounded-md border border-emerald-100/50 bg-emerald-50/40 px-2 py-1 text-[10.5px] font-bold text-emerald-600 transition hover:bg-emerald-50/80"
                     >
                       Tồn kho
@@ -315,7 +343,7 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
                     <button
                       type="button"
                       onClick={() => navigate(`/edit/${room.id}`)}
-                      disabled={hasPendingRequest}
+                      disabled={hasPendingRequest || isArchivedRoom(room)}
                       className="rounded-md border border-slate-200/50 bg-white px-2 py-1 text-[10.5px] font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Sửa
@@ -323,11 +351,20 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
                     <button
                       type="button"
                       onClick={() => requestDelete(room)}
-                      disabled={hasPendingRequest}
+                      disabled={hasPendingRequest || isArchivedRoom(room)}
                       className="rounded-md border border-rose-100/50 bg-rose-50/40 px-2 py-1 text-[10.5px] font-bold text-rose-600 transition hover:bg-rose-100/80 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Yêu cầu xóa
                     </button>
+                    {isArchivedRoom(room) && (
+                      <button
+                        type="button"
+                        onClick={() => requestRestore(room)}
+                        className="rounded-md border border-indigo-100 bg-indigo-50 px-2 py-1 text-[10.5px] font-bold text-indigo-600 transition hover:bg-indigo-100"
+                      >
+                        Khôi phục
+                      </button>
+                    )}
                   </div>
                 </div>
               </article>
