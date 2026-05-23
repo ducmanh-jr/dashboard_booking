@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nowayhome-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: nowayhome
+      POSTGRES_PASSWORD: nowayhome
+      POSTGRES_DB: nowayhome
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docs/postgresql3.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - nowayhome_network
+
+volumes:
+  postgres_data:
+
+networks:
+  nowayhome_network:
+    driver: bridge

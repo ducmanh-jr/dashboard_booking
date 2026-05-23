@@ -1,0 +1,39 @@
+services:
+  database:
+    image: postgres:16-alpine
+    container_name: nowayhome-db
+    environment:
+      POSTGRES_USER: nowayhome
+      POSTGRES_PASSWORD: nowayhome
+      POSTGRES_DB: nowayhome
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nowayhome -d nowayhome"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: nowayhome-core-api:latest
+    build:
+      context: ./core_api
+      dockerfile: Dockerfile
+    container_name: nowayhome-api
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=database;Port=5432;Database=nowayhome;Username=nowayhome;Password=nowayhome;
+      - Jwt__Key=SuperSecretKeyForDevelopmentOnlyChangeInProduction
+      - Jwt__Issuer=NowayhomeIssuer
+      - Jwt__Audience=NowayhomeAudience
+      - Jwt__ExpiresInMinutes=60
+    depends_on:
+      database:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

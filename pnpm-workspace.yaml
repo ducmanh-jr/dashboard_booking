@@ -1,0 +1,14 @@
+packages:
+  - 'backend'
+  - 'web'
+  - 'web/apps/*'
+  - 'web/packages/*'
+  - 'tools/*'
+allowBuilds:
+  '@nestjs/core': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@scarf/scarf': true
+  bcrypt: true
+  esbuild: true
+  prisma: true
