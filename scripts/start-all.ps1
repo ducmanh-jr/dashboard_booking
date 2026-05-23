@@ -13,10 +13,12 @@ $BackendDir = Join-Path $Root "backend"
 $WebDir = Join-Path $Root "web"
 $AdminDir = Join-Path $WebDir "apps\admin"
 $PartnerDir = Join-Path $WebDir "apps\partner"
+$CustomerDir = Join-Path $WebDir "apps\customer"
 $LockPath = Join-Path $env:TEMP "nwh_running.lock"
 
 $ChromeAdmin = Join-Path $env:TEMP "nwh_admin"
 $ChromePartner = Join-Path $env:TEMP "nwh_partner"
+$ChromeCustomer = Join-Path $env:TEMP "nwh_customer"
 
 function NowText {
   return (Get-Date -Format "HH:mm:ss")
@@ -158,6 +160,8 @@ try {
   Write-Host ""
   Write-Host "Web Admin       http://localhost:5173" -ForegroundColor White
   Write-Host "Web Partner     http://localhost:5174/login" -ForegroundColor White
+  Write-Host "Web Khach Hang  http://localhost:5175" -ForegroundColor White
+  Write-Host ("Mobile Customer http://{0}:5175" -f $Ip) -ForegroundColor White
   Write-Host ""
 
   Run-Step "Kiem tra cau truc folder" {
@@ -166,6 +170,7 @@ try {
       (Join-Path $WebDir "package.json"),
       (Join-Path $AdminDir "package.json"),
       (Join-Path $PartnerDir "package.json"),
+      (Join-Path $CustomerDir "package.json"),
       (Join-Path $Root "database\snapshots\schema.sql"),
       (Join-Path $Root "database\snapshots\data.sql")
     )
@@ -174,8 +179,8 @@ try {
     }
   }
 
-  Run-Step "Dung process cu tren port 3001, 5173, 5174" {
-    Stop-PortProcesses @(3001, 5173, 5174)
+  Run-Step "Dung process cu tren port 3001, 5173, 5174, 5175" {
+    Stop-PortProcesses @(3001, 5173, 5174, 5175)
     Stop-OldNwhProcesses
     Remove-Item -LiteralPath $LockPath -Force -ErrorAction SilentlyContinue
   }
@@ -226,19 +231,21 @@ try {
     Invoke-CommandChecked "pnpm" @("--filter", "backend", "run", "build") -Quiet
   }
 
-  Run-Step "Mo 3 tien trinh backend/admin/partner" {
+  Run-Step "Mo 4 tien trinh backend/admin/partner/customer" {
     Start-ServiceWindow "nwh-backend" "pnpm --filter backend start:prod"
     Start-ServiceWindow "nwh-admin" "pnpm --filter webadmin dev --host 127.0.0.1"
     Start-ServiceWindow "nwh-partner" "pnpm --filter webpartner dev --host 127.0.0.1"
+    Start-ServiceWindow "nwh-customer" "pnpm --filter webcustomer dev --host 0.0.0.0"
   }
 
   Run-Step "Doi backend san sang" {
     Wait-Http "http://127.0.0.1:3001/api/healthz" 90
   }
 
-  Run-Step "Doi web admin/partner san sang" {
+  Run-Step "Doi web admin/partner/customer san sang" {
     Wait-Http "http://127.0.0.1:5173" 60
     Wait-Http "http://127.0.0.1:5174/login" 60
+    Wait-Http "http://127.0.0.1:5175" 60
   }
 
   if ($NoBrowser) {
@@ -247,6 +254,7 @@ try {
     Run-Step "Mo trinh duyet" {
       Open-Chrome $ChromeAdmin "http://localhost:5173"
       Open-Chrome $ChromePartner "http://localhost:5174/login"
+      Open-Chrome $ChromeCustomer ("http://{0}:5175" -f $Ip)
     }
   }
 

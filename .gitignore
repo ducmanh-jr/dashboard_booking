@@ -22,7 +22,7 @@ pnpm-debug.log*
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# .NET / C# build outputs
+# .NET / C# Build Outputs
 **/bin/
 **/obj/
 *.user

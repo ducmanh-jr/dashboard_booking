@@ -1,0 +1,13 @@
+{
+  "name": "hotel-importer-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "import": "node src/import-hotels.mjs output/input.csv --dry-run --fetch-agoda --fill-missing"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
