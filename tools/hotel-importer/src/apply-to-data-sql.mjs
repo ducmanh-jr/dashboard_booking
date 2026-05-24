@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadDatabaseEnv, runPgTool } from "../../database/scripts/postgres-tools.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const toolRoot = path.resolve(__dirname, "..");
@@ -103,19 +104,44 @@ async function main() {
     await fs.writeFile(dataSqlPath, payload, "utf8");
   }
 
-  await fs.writeFile(applyPath, "", "utf8");
+// ----- PostgreSQL execution (live mode) -----
+let applied = false;
+let pgError = null;
+let mode = "snapshot-only";
+if (process.env.SKIP_POSTGRES_APPLY !== "1") {
+  try {
+    await loadDatabaseEnv();
+    // Write temporary file containing only the new blocks
+    const tempSqlPath = path.join(toolRoot, "output", "saved", "apply_temp.sql");
+    const tempPayload = ["BEGIN;", ...finalBlocks, "COMMIT;"].join("\n");
+    await fs.writeFile(tempSqlPath, tempPayload, "utf8");
+    await runPgTool("psql", ["-f", tempSqlPath]);
+    await fs.rm(tempSqlPath, { force: true });
+    applied = true;
+    mode = "postgresql-live";
+  } catch (e) {
+    pgError = e.message;
+    mode = "postgresql-failed";
+  }
+} else {
+  mode = "offline-snapshot";
+}
 
-  console.log(JSON.stringify({
-    ok: true,
-    mode: "postgresql-snapshot",
-    dataSqlPath,
-    applyPath,
-    appendedHotels: finalBlocks.length,
-    skippedDuplicateSlugs: skippedDuplicateSlugs.length,
-    skippedExistingSlugs: skippedExistingSlugs.length,
-    distribution,
-    applySqlBytesAfter: 0,
-  }, null, 2));
+await fs.writeFile(applyPath, "", "utf8");
+
+console.log(JSON.stringify({
+  ok: true,
+  applied,
+  mode,
+  pgError,
+  dataSqlPath,
+  applyPath,
+  appendedHotels: finalBlocks.length,
+  skippedDuplicateSlugs: skippedDuplicateSlugs.length,
+  skippedExistingSlugs: skippedExistingSlugs.length,
+  distribution,
+  applySqlBytesAfter: 0,
+}, null, 2));
 }
 
 main().catch((error) => {

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-16T09:03:11.286Z",
+  "updatedAt": "2026-05-24T06:14:11.522Z",
   "items": [
     {
       "id": "agoda-67196155",
@@ -7625,11 +7625,12 @@
       "hotelName": "UNU C&B homestay",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-42256090",
@@ -7638,11 +7639,12 @@
       "hotelName": "Cali Homestay",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-47497858",
@@ -7651,11 +7653,12 @@
       "hotelName": "Ahu Homestay",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-42033094",
@@ -7664,11 +7667,12 @@
       "hotelName": "Doi Sao homestay",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-1157500",
@@ -7677,11 +7681,12 @@
       "hotelName": "Glenwood City Resort",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-64629124",
@@ -7690,11 +7695,12 @@
       "hotelName": "Khu nghỉ dưỡng Golden Emerald",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-46874948",
@@ -7703,11 +7709,12 @@
       "hotelName": "Khu nghỉ dưỡng Hidden Mansions Sài Gòn",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-30753574",
@@ -7716,11 +7723,12 @@
       "hotelName": "Khu nghỉ dưỡng Phương Nam",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-31641370",
@@ -7729,11 +7737,12 @@
       "hotelName": "Khách sạn Vilion Boutique Bến Thành",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-1868973",
@@ -7742,11 +7751,12 @@
       "hotelName": "Khách sạn New Star Inn",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-63810012",
@@ -7755,11 +7765,12 @@
       "hotelName": "Khách sạn MG Rosé Boutique",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-55819905",
@@ -7768,11 +7779,12 @@
       "hotelName": "Khách sạn Lanura Sài Gòn Boutique",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-5815179",
@@ -7781,11 +7793,12 @@
       "hotelName": "Khách sạn Cactusland Boutique",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-37544150",
@@ -7794,11 +7807,12 @@
       "hotelName": "Khách sạn DAI NAM Boutique",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-42071330",
@@ -7807,11 +7821,12 @@
       "hotelName": "Khách sạn Valentine Luxury 31 Bùi Viện",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-28335101",
@@ -7820,11 +7835,12 @@
       "hotelName": "Khách sạn & Căn hộ KunKin Luxury",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-75883423",
@@ -7833,11 +7849,12 @@
       "hotelName": "Căn hộ cao cấp Belvilla gần SECC (trước đây là Emerald Hotel & Apartment)",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-75883449",
@@ -7846,11 +7863,12 @@
       "hotelName": "Khách sạn Belvilla Luxury gần SECC (trước đây là Khách sạn Sunshine Garden)",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-256146",
@@ -7859,11 +7877,12 @@
       "hotelName": "Khách Sạn Sunflower Luxury Hồ Chí Minh",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-81317234",
@@ -7872,11 +7891,12 @@
       "hotelName": "4 Stars Avalon Apartment in Ho Chi Minh City Center | Pool | Gym | Sauna",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 57
     },
     {
       "id": "agoda-69804163",
@@ -7885,11 +7905,12 @@
       "hotelName": "OYO 425 Seven Stars Hotel",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 57
     },
     {
       "id": "agoda-55104700",
@@ -7898,11 +7919,12 @@
       "hotelName": "Signature Duplex 4 bedroom Starhill - Free Pick Up",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 57
     },
     {
       "id": "agoda-9790295",
@@ -7911,11 +7933,12 @@
       "hotelName": "Chung cư 30 m² 1 phòng ngủ, 1 phòng tắm riêng ở Quận 1",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-6255685",
@@ -7924,11 +7947,12 @@
       "hotelName": "Chung cư 41 m² 1 phòng ngủ, 1 phòng tắm riêng ở Phước Kiển",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-55328181",
@@ -7937,11 +7961,12 @@
       "hotelName": "Căn hộ 40 m² 1 phòng ngủ, 1 phòng tắm riêng ở Quận 4",
       "city": "Hồ Chí Minh",
       "countryCode": "VN",
-      "status": "pending",
-      "attempts": 0,
+      "status": "needs_review",
+      "attempts": 1,
       "addedAt": "2026-05-16T08:59:18.081Z",
-      "updatedAt": "2026-05-16T08:59:18.081Z",
-      "lastError": ""
+      "updatedAt": "2026-05-24T06:14:11.522Z",
+      "lastError": "",
+      "qualityScore": 85
     },
     {
       "id": "agoda-52089315",
