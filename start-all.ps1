@@ -8,7 +8,7 @@ if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction Sile
   $PSNativeCommandUseErrorActionPreference = $false
 }
 
-$Root = Split-Path -Parent $PSScriptRoot
+$Root = $PSScriptRoot
 $BackendDir = Join-Path $Root "backend"
 $WebDir = Join-Path $Root "web"
 $AdminDir = Join-Path $WebDir "apps\admin"
