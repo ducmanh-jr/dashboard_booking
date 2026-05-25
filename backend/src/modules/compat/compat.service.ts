@@ -24,6 +24,10 @@ type CompatBooking = Prisma.BookingGetPayload<Record<string, never>> & {
   customer?: Prisma.UserGetPayload<Record<string, never>>;
   property?: Prisma.PropertyGetPayload<Record<string, never>>;
 };
+type CompatProperty = Prisma.PropertyGetPayload<{ include: ReturnType<CompatService['propertyInclude']> }>;
+type LegacyPropertyPayload = Record<string, unknown>;
+type LegacyNearbyPayload = Record<string, unknown>;
+type LegacyRowsByPropertyId = Map<string, { property?: LegacyPropertyPayload; nearby: LegacyNearbyPayload[] }>;
 
 const DEFAULT_IMAGE =
   'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80';
@@ -44,7 +48,7 @@ export class CompatService {
       include: this.propertyInclude(),
       orderBy: { createdAt: 'desc' },
     });
-    const rooms = properties.map((property) => this.mapRoom(property));
+    const rooms = await this.mapRooms(properties);
     return { hotels: rooms, rooms };
   }
 
@@ -64,7 +68,7 @@ export class CompatService {
       include: this.propertyInclude(),
     });
     if (!property) throw new NotFoundException('Khong tim thay khach san');
-    const room = this.mapRoom(property);
+    const room = await this.mapOneRoom(property);
     return { hotel: room, room };
   }
 
@@ -75,7 +79,7 @@ export class CompatService {
       include: this.propertyInclude(),
       orderBy: { createdAt: 'desc' },
     });
-    const rooms = properties.map((property) => this.mapRoom(property));
+    const rooms = await this.mapRooms(properties);
     return { hotels: rooms, rooms };
   }
 
@@ -86,7 +90,7 @@ export class CompatService {
       include: this.propertyInclude(),
     });
     if (!property) throw new NotFoundException('Khong tim thay phong');
-    const room = this.mapRoom(property);
+    const room = await this.mapOneRoom(property);
     return { hotel: room, room };
   }
 
@@ -179,7 +183,7 @@ export class CompatService {
       include: this.propertyInclude(),
       orderBy: { createdAt: 'desc' },
     });
-    return { rooms: properties.map((property) => this.mapRoom(property)) };
+    return { rooms: await this.mapRooms(properties) };
   }
 
   async setRoomStatus(
@@ -222,7 +226,7 @@ export class CompatService {
       where: { partnerId: partner.id },
       include: this.propertyInclude(),
     });
-    return { rooms: properties.map((property) => this.mapRoom(property)) };
+    return { rooms: await this.mapRooms(properties) };
   }
 
   async partners(status?: string) {
@@ -983,8 +987,62 @@ export class CompatService {
     };
   }
 
-  private mapRoom(property: Prisma.PropertyGetPayload<{ include: ReturnType<CompatService['propertyInclude']> }>) {
+  private async mapOneRoom(property: CompatProperty) {
+    const legacyRows = await this.loadLegacyRows([property.id]);
+    return this.mapRoom(property, legacyRows.get(property.id.toString()));
+  }
+
+  private async mapRooms(properties: CompatProperty[]) {
+    const legacyRows = await this.loadLegacyRows(properties.map((property) => property.id));
+    return properties.map((property) => this.mapRoom(property, legacyRows.get(property.id.toString())));
+  }
+
+  private async loadLegacyRows(propertyIds: bigint[]): Promise<LegacyRowsByPropertyId> {
+    const rowsByPropertyId: LegacyRowsByPropertyId = new Map(
+      propertyIds.map((id) => [id.toString(), { nearby: [] }]),
+    );
+    if (propertyIds.length === 0) return rowsByPropertyId;
+
+    const sourceIds = propertyIds.map((id) => id.toString());
+    const propertyRows = await this.prisma.$queryRaw<Array<{ source_id: string | null; payload: LegacyPropertyPayload }>>`
+      SELECT source_id, payload
+      FROM legacy_source_rows
+      WHERE source_table = 'properties'
+        AND source_id IN (${Prisma.join(sourceIds)})
+    `;
+    for (const row of propertyRows) {
+      if (!row.source_id) continue;
+      const bucket = rowsByPropertyId.get(row.source_id) ?? { nearby: [] };
+      bucket.property = row.payload;
+      rowsByPropertyId.set(row.source_id, bucket);
+    }
+
+    const nearbyRows = await this.prisma.$queryRaw<Array<{ payload: LegacyNearbyPayload }>>`
+      SELECT payload
+      FROM legacy_source_rows
+      WHERE source_table = 'property_nearby_places'
+        AND payload->>'property_id' IN (${Prisma.join(sourceIds)})
+      ORDER BY (payload->>'distance_m')::int ASC NULLS LAST
+    `;
+    for (const row of nearbyRows) {
+      const propertyId = this.text(row.payload.property_id, '');
+      if (!propertyId) continue;
+      const bucket = rowsByPropertyId.get(propertyId) ?? { nearby: [] };
+      bucket.nearby.push(row.payload);
+      rowsByPropertyId.set(propertyId, bucket);
+    }
+
+    return rowsByPropertyId;
+  }
+
+  private mapRoom(property: CompatProperty, legacy?: { property?: LegacyPropertyPayload; nearby: LegacyNearbyPayload[] }) {
     const firstRoomType = property.roomTypes[0];
+    const propertyRoomImages = property.media
+      .filter((media) => media.category === 'room')
+      .map((media) => media.url);
+    const propertyFallbackImages = propertyRoomImages.length
+      ? propertyRoomImages
+      : property.media.map((media) => media.url);
     const prices = property.roomTypes.flatMap((roomType) =>
       roomType.ratePlans.map((ratePlan) => ({
         id: ratePlan.id,
@@ -995,10 +1053,17 @@ export class CompatService {
         capacity: roomType.maxOccupancy,
         bedInfo: roomType.bedConfiguration,
         amenities: roomType.amenities.map((item) => item.amenity.name).join(', '),
-        imageUrls: roomType.media.map((media) => media.url),
+        imageUrls: roomType.media.map((media) => media.url).length
+          ? roomType.media.map((media) => media.url)
+          : propertyFallbackImages.slice(0, 4),
       })),
     );
     const media = property.media.length ? property.media : [{ category: 'other', url: DEFAULT_IMAGE, caption: null }];
+    const legacyProperty = legacy?.property;
+    const legacyAmenities = this.parseStringList(legacyProperty?.amenities_json);
+    const legacyHighlights = this.parseStringList(legacyProperty?.highlights_json);
+    const legacyTransportConnections = this.parseTransportConnections(legacyProperty?.transport_connections_json);
+    const legacyNearbyPlaces = this.parseNearbyPlaces(legacy?.nearby ?? []);
     return {
       id: property.id,
       name: property.name,
@@ -1010,10 +1075,12 @@ export class CompatService {
       longitude: Number(property.longitude),
       area: firstRoomType?.areaSqm ? Number(firstRoomType.areaSqm) : null,
       capacity: firstRoomType?.maxOccupancy ?? 2,
-      amenities: property.amenities.map((item) => item.amenity.name),
-      highlights: [],
-      transportConnections: [],
-      nearbyPlaces: [],
+      amenities: property.amenities.map((item) => item.amenity.name).length
+        ? property.amenities.map((item) => item.amenity.name)
+        : legacyAmenities,
+      highlights: legacyHighlights,
+      transportConnections: legacyTransportConnections,
+      nearbyPlaces: legacyNearbyPlaces,
       images: media.map((item) => ({
         category: item.category,
         url: item.url,
@@ -1054,6 +1121,74 @@ export class CompatService {
         partnerRevenue: property.bookings.reduce((sum, booking) => sum + Number(booking.partnerPayoutAmount), 0),
       },
     };
+  }
+
+  private parseStringList(value: unknown): string[] {
+    const parsed = this.parseLegacyJson(value);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((item) => this.text(item, ''))
+        .filter(Boolean);
+    }
+    if (typeof parsed === 'string') {
+      return parsed
+        .split('|')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return [];
+  }
+
+  private parseTransportConnections(value: unknown) {
+    const parsed = this.parseLegacyJson(value);
+    const rows = Array.isArray(parsed) ? parsed : typeof parsed === 'string' ? parsed.split('|') : [];
+    return rows
+      .map((item) => {
+        if (typeof item === 'string') {
+          const [name, distance] = item.split(':').map((part) => part.trim());
+          return name ? { name, distance: distance || '', note: null } : null;
+        }
+        if (item && typeof item === 'object') {
+          const row = item as Record<string, unknown>;
+          const name = this.text(row.name, '');
+          return name
+            ? {
+                name,
+                distance: this.text(row.distance, ''),
+                note: this.text(row.note, '') || null,
+              }
+            : null;
+        }
+        return null;
+      })
+      .filter((item): item is { name: string; distance: string; note: string | null } => Boolean(item));
+  }
+
+  private parseNearbyPlaces(rows: LegacyNearbyPayload[]) {
+    return rows
+      .map((row) => {
+        const name = this.text(row.name, '');
+        if (!name) return null;
+        return {
+          name,
+          type: this.text(row.category, ''),
+          distanceM: Number(row.distance_m ?? 0),
+          lat: Number(row.latitude ?? 0),
+          lon: Number(row.longitude ?? 0),
+        };
+      })
+      .filter((item): item is { name: string; type: string; distanceM: number; lat: number; lon: number } => Boolean(item));
+  }
+
+  private parseLegacyJson(value: unknown): unknown {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed;
+    }
   }
 
   private mapBooking(booking: CompatBooking) {

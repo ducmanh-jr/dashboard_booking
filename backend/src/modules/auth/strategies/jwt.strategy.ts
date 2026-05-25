@@ -37,13 +37,25 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }),
     );
 
-    return (
-      cookies.session ||
-      cookies.session_customer ||
-      cookies.session_partner ||
-      cookies.session_admin ||
-      null
-    );
+    const path = (request.path ?? request.originalUrl ?? '').replace(/^\/api(?=\/)/, '');
+    const preferredCookieNames = path.startsWith('/partner/')
+      ? ['session_partner', 'session']
+      : path.startsWith('/admin/')
+        ? ['session_admin', 'session']
+        : path.startsWith('/bookings') || path.startsWith('/mock-payment')
+          ? ['session_customer', 'session']
+          : [
+              'session',
+              'session_customer',
+              'session_partner',
+              'session_admin',
+            ];
+
+    for (const name of preferredCookieNames) {
+      if (cookies[name]) return cookies[name];
+    }
+
+    return null;
   }
 
   validate(payload: JwtPayload): AuthenticatedUser {
