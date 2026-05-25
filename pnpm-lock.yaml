@@ -203,55 +203,6 @@ importers:
         specifier: ^5.4.10
         version: 5.4.21(@types/node@25.8.0)(lightningcss@1.32.0)(terser@5.47.1)
 
-  web/apps/customer:
-    dependencies:
-      '@nowayhome/api-client':
-        specifier: workspace:*
-        version: link:../../packages/api-client
-      '@nowayhome/auth-ui':
-        specifier: workspace:*
-        version: link:../../packages/auth-ui
-      qrcode.react:
-        specifier: ^4.2.0
-        version: 4.2.0(react@18.3.1)
-      react:
-        specifier: ^18.3.1
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.3.1
-        version: 18.3.1(react@18.3.1)
-      react-router-dom:
-        specifier: ^7.14.2
-        version: 7.15.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-    devDependencies:
-      '@tailwindcss/typography':
-        specifier: ^0.5.15
-        version: 0.5.19(tailwindcss@4.3.0)
-      '@tailwindcss/vite':
-        specifier: ^4.1.0
-        version: 4.3.0(vite@5.4.21(@types/node@25.8.0)(lightningcss@1.32.0)(terser@5.47.1))
-      '@types/react':
-        specifier: ^18.3.12
-        version: 18.3.28
-      '@types/react-dom':
-        specifier: ^18.3.1
-        version: 18.3.7(@types/react@18.3.28)
-      '@vitejs/plugin-react':
-        specifier: ^4.3.3
-        version: 4.7.0(vite@5.4.21(@types/node@25.8.0)(lightningcss@1.32.0)(terser@5.47.1))
-      tailwindcss:
-        specifier: ^4.1.0
-        version: 4.3.0
-      tw-animate-css:
-        specifier: ^1.2.0
-        version: 1.4.0
-      typescript:
-        specifier: ^5.6.3
-        version: 5.9.3
-      vite:
-        specifier: ^5.4.10
-        version: 5.4.21(@types/node@25.8.0)(lightningcss@1.32.0)(terser@5.47.1)
-
   web/apps/partner:
     dependencies:
       '@nowayhome/api-client':
@@ -314,6 +265,13 @@ importers:
       react-dom:
         specifier: ^18.0.0
         version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.12
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.1
+        version: 18.3.7(@types/react@18.3.28)
 
 packages:
 
@@ -2934,11 +2892,6 @@ packages:
 
   pure-rand@6.1.0:
     resolution: {integrity: sha512-bVWawvoZoBYpp6yIoQtQXHZjmz35RSVHnUOTefl8Vcjr8snTPY1wnpSPMWekcFwbxI6gtmT7rSYPFvz71ldiOA==}
-
-  qrcode.react@4.2.0:
-    resolution: {integrity: sha512-QpgqWi8rD9DsS9EP3z7BT+5lY5SFhsqGjpgW5DY/i3mK4M9DTBNz3ErMi8BWYEfI3L0d8GIbGmcdFAS1uIRGjA==}
-    peerDependencies:
-      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   qs@6.15.1:
     resolution: {integrity: sha512-6YHEFRL9mfgcAvql/XhwTvf5jKcOiiupt2FiJxHkiX1z4j7WL8J/jRHYLluORvc1XxB5rV20KoeK00gVJamspg==}
@@ -6073,10 +6026,6 @@ snapshots:
   punycode@2.3.1: {}
 
   pure-rand@6.1.0: {}
-
-  qrcode.react@4.2.0(react@18.3.1):
-    dependencies:
-      react: 18.3.1
 
   qs@6.15.1:
     dependencies:

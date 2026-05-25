@@ -67,17 +67,16 @@ Chạy:
 
 Script sẽ tự động:
 
-- Dừng các service cũ trên port `3001`, `5173`, `5174`, `5175`
+- Dừng các service cũ trên port `3001`, `5173`, `5174`
 - Khởi động PostgreSQL bằng Docker
 - Nạp lại database snapshot
 - Build backend
-- Chạy backend, admin, partner và customer web
+- Chạy backend, admin và partner web
 
 ## 7. Các địa chỉ sử dụng
 
 - Admin: http://localhost:5173
 - Partner: http://localhost:5174/login
-- Customer: http://localhost:5175
 - Backend health: http://localhost:3001/api/healthz
 
 ## 8. Dừng dự án

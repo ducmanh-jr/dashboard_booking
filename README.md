@@ -11,7 +11,6 @@ database/
 web/                      React + Vite monorepo
   apps/admin              Admin app, port 5173
   apps/partner            Partner app, port 5174
-  apps/customer           Customer app, port 5175
   packages/api-client
   packages/auth-ui
 start-all.bat
@@ -55,5 +54,4 @@ powershell -ExecutionPolicy Bypass -File database/data-sync/export.ps1
 
 - Admin: http://localhost:5173
 - Partner: http://localhost:5174/login
-- Customer: http://localhost:5175
 - Backend health: http://localhost:3001/api/healthz

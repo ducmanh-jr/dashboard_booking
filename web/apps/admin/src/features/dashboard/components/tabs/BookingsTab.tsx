@@ -212,8 +212,9 @@ export function BookingsTab() {
     setErr("");
     try {
       const result = await fetchBookingReport();
-      bookingReportCache = result.hotels || [];
-      setHotels(bookingReportCache);
+      const hotels = result.hotels || [];
+      bookingReportCache = hotels;
+      setHotels(hotels);
     } catch (error: any) {
       setErr(error.message);
     } finally {

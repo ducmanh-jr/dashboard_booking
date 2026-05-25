@@ -4,20 +4,16 @@
   "version": "1.0.0",
   "workspaces": [
     "apps/admin",
-    "apps/customer",
     "apps/partner",
     "packages/*"
   ],
   "scripts": {
     "dev:admin": "npm --workspace apps/admin run dev",
-    "dev:customer": "npm --workspace apps/customer run dev",
     "dev:partner": "npm --workspace apps/partner run dev",
-    "typecheck": "npm run typecheck:admin && npm run typecheck:partner && npm run typecheck:customer",
-    "typecheck:admin": "tsc -p apps/admin/tsconfig.json --noEmit",
-    "typecheck:customer": "tsc -p apps/customer/tsconfig.json --noEmit",
-    "typecheck:partner": "tsc -p apps/partner/tsconfig.json --noEmit",
+    "typecheck": "npm run typecheck:admin && npm run typecheck:partner",
+    "typecheck:admin": "pnpm --filter webadmin exec tsc -p tsconfig.json --noEmit",
+    "typecheck:partner": "pnpm --filter webpartner exec tsc -p tsconfig.json --noEmit",
     "build:admin": "npm --workspace apps/admin run build",
-    "build:customer": "npm --workspace apps/customer run build",
     "build:partner": "npm --workspace apps/partner run build"
   }
 }
