@@ -8,8 +8,26 @@ export const login = async (data: any) => {
   });
 };
 
+export const googleLogin = async (credential: string) => {
+  return await api("/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ credential }),
+  });
+};
+
 export const registerPartner = async (data: any) => {
   return await api("/partner/auth/register", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+/**
+ * Dùng cho user đã login (Google) muốn nộp đơn làm đối tác.
+ * Không tạo user mới — dùng JWT cookie hiện tại.
+ */
+export const applyAsPartner = async (data: { hotelName: string; phone?: string }) => {
+  return await api("/partner/apply", {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -22,3 +40,5 @@ export const fetchMe = async () => {
 export const logout = async () => {
   return await api(API_PATHS.AUTH.LOGOUT, { method: "POST" });
 };
+
+

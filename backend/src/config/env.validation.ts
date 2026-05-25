@@ -12,4 +12,6 @@ export const envValidationSchema = Joi.object({
   CLOUDINARY_CLOUD_NAME: Joi.string().optional(),
   CLOUDINARY_API_KEY: Joi.string().optional(),
   CLOUDINARY_API_SECRET: Joi.string().optional(),
+  GOOGLE_CLIENT_ID: Joi.string().optional(),
+  ADMIN_EMAILS: Joi.string().optional(),
 });

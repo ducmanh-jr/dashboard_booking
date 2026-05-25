@@ -399,10 +399,48 @@ export class CompatService {
   }
 
   async deleteUser(id: string) {
-    await this.prisma.user.update({
-      where: { id: this.parseId(id, 'Ma nguoi dung khong hop le') },
-      data: { deletedAt: new Date(), status: user_status_enum.deleted },
+    const userId = this.parseId(id, 'Ma nguoi dung khong hop le');
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
     });
+    if (user) {
+      const suffix = `_deleted_${userId}_${Date.now()}`;
+      const newEmail = user.email.includes('_deleted_') ? user.email : `${user.email}${suffix}`;
+      const newPhone = null;
+
+      await this.prisma.$transaction(async (tx) => {
+        // Xóa các session của user
+        await tx.userSession.deleteMany({
+          where: { userId },
+        });
+
+        // Xóa social account
+        await tx.socialAccount.deleteMany({
+          where: { userId },
+        });
+
+        // Xóa PartnerProfile
+        await tx.partnerProfile.deleteMany({
+          where: { userId },
+        });
+
+        // Xóa CustomerProfile
+        await tx.customerProfile.deleteMany({
+          where: { userId },
+        });
+
+        // Cập nhật User (đổi email/phone để giải phóng unique constraints và đánh dấu đã xóa)
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            email: newEmail,
+            phone: newPhone,
+            deletedAt: new Date(),
+            status: user_status_enum.deleted,
+          },
+        });
+      });
+    }
     return { ok: true };
   }
 

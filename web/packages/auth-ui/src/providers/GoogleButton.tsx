@@ -1,3 +1,24 @@
+import { useEffect, useRef } from "react";
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: {
+            client_id: string;
+            callback: (response: { credential: string }) => void;
+            auto_select?: boolean;
+            cancel_on_tap_outside?: boolean;
+          }) => void;
+          prompt: () => void;
+          cancel: () => void;
+        };
+      };
+    };
+  }
+}
+
 function GoogleIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true" style={{ flexShrink: 0, display: "block" }}>
@@ -10,19 +31,84 @@ function GoogleIcon() {
   );
 }
 
+/** Tải Google Identity Services script một lần duy nhất */
+function loadGisScript(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (window.google?.accounts?.id) return Promise.resolve();
+  if (document.getElementById("gis-script")) {
+    // Script đang tải — chờ nó tải xong
+    return new Promise((resolve) => {
+      const el = document.getElementById("gis-script") as HTMLScriptElement;
+      if (el.dataset.loaded === "1") { resolve(); return; }
+      el.addEventListener("load", () => resolve(), { once: true });
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.id = "gis-script";
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => { script.dataset.loaded = "1"; resolve(); };
+    script.onerror = () => reject(new Error("Failed to load Google Identity Services script"));
+    document.head.appendChild(script);
+  });
+}
+
 export function GoogleButton({
-  href,
+  clientId,
+  onCredential,
   label = "Sign in with Google",
 }: {
-  href: string;
+  clientId: string;
+  onCredential: (credential: string) => void;
   label?: string;
 }) {
+  const initializedRef = useRef(false);
+
+  useEffect(() => {
+    if (!clientId || initializedRef.current) return;
+    initializedRef.current = true;
+
+    loadGisScript().then(() => {
+      window.google?.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response) => {
+          if (response.credential) {
+            onCredential(response.credential);
+          }
+        },
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      });
+    }).catch((err) => {
+      console.error("[GoogleButton] GIS script load error:", err);
+    });
+  }, [clientId, onCredential]);
+
+  function handleClick() {
+    if (!window.google?.accounts?.id) {
+      loadGisScript().then(() => window.google?.accounts.id.prompt());
+      return;
+    }
+    // Re-initialize để cập nhật callback mới nhất trước khi prompt
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: (response) => {
+        if (response.credential) onCredential(response.credential);
+      },
+      auto_select: false,
+      cancel_on_tap_outside: true,
+    });
+    window.google.accounts.id.prompt();
+  }
+
   return (
     <button
       type="button"
-      onClick={() => {
-        window.location.assign(href);
-      }}
+      id="google-signin-btn"
+      onClick={handleClick}
       style={{
         width: "100%",
         height: 48,

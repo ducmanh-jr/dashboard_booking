@@ -8,6 +8,13 @@ export const login = async (data: any) => {
   });
 };
 
+export const googleLogin = async (credential: string) => {
+  return await api("/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ credential }),
+  });
+};
+
 export const logout = async () => {
   return await api(API_PATHS.AUTH.LOGOUT, {
     method: "POST",
@@ -17,3 +24,4 @@ export const logout = async () => {
 export const fetchMe = async () => {
   return await api(API_PATHS.AUTH.ME);
 };
+

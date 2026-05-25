@@ -22,6 +22,7 @@ import {
   RefreshResponse,
   SafeUser,
 } from './auth.service';
+import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -82,6 +83,28 @@ export class AuthController {
     @Body() refreshTokenDto: RefreshTokenDto,
   ): Promise<RefreshResponse> {
     return this.authService.refresh(refreshTokenDto);
+  }
+
+  @Public()
+  @Post('google')
+  @ApiOperation({ summary: 'Login or register via Google Identity Services (GIS)' })
+  @ApiBody({ type: GoogleLoginDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Login via Google successful, tokens and user info returned.',
+  })
+  @ApiResponse({ status: 401, description: 'Invalid Google credential.' })
+  async googleLogin(
+    @Body() dto: GoogleLoginDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<LoginResponse> {
+    const result = await this.authService.googleLogin(dto.credential, {
+      ipAddress: request.ip,
+      userAgent: request.get('user-agent'),
+    });
+    this.setSessionCookies(response, result.accessToken, result.user.userType);
+    return result;
   }
 
   @Post('logout')

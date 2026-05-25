@@ -1,7 +1,9 @@
 import { FormEvent, useState } from "react";
-import { login } from "../../../api/authApi";
+import { login, googleLogin } from "../../../api/authApi";
 import { AuthLayout, GoogleButton } from "@nowayhome/auth-ui";
 import { User } from "../../../shared/types";
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
 
 const inputClass =
   "w-full h-[48px] pl-[44px] pr-[14px] rounded-xl border border-[#e2e8f0] bg-[#f8fafc]/50 text-sm text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#3b82f6] focus:bg-white focus:ring-4 focus:ring-[#3b82f6]/5 focus:shadow-[0_0_20px_rgba(59,130,246,0.1)] transition-all duration-300";
@@ -22,6 +24,22 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
       onLogin(result.user);
     } catch (error: any) {
       setErr(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleCredential(credential: string) {
+    setErr("");
+    setLoading(true);
+    try {
+      const result = await googleLogin(credential);
+      if (result.user?.role !== "admin") {
+        throw new Error("Tài khoản này không phải admin. Chỉ email admin mới được đăng nhập tại đây.");
+      }
+      onLogin(result.user);
+    } catch (error: any) {
+      setErr(error.message ?? "Đăng nhập Google thất bại");
     } finally {
       setLoading(false);
     }
@@ -77,18 +95,27 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
             {loading ? "Signing in..." : "Sign in"}
           </button>
 
-          <div className="relative py-1">
-            <div className="absolute inset-0 flex items-center" aria-hidden="true">
-              <div className="w-full border-t border-[#e2e8f0]"></div>
-            </div>
-            <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-bold">
-              <span className="bg-[#fcfdfe] px-2 text-[#94a3b8]">Or continue with</span>
-            </div>
-          </div>
+          {GOOGLE_CLIENT_ID && (
+            <>
+              <div className="relative py-1">
+                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                  <div className="w-full border-t border-[#e2e8f0]"></div>
+                </div>
+                <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-bold">
+                  <span className="bg-[#fcfdfe] px-2 text-[#94a3b8]">Or continue with</span>
+                </div>
+              </div>
 
-          <GoogleButton href="/api/auth/google/start" />
+              <GoogleButton
+                clientId={GOOGLE_CLIENT_ID}
+                onCredential={handleGoogleCredential}
+                label={loading ? "Signing in..." : "Sign in with Google"}
+              />
+            </>
+          )}
         </div>
       </form>
     </AuthLayout>
   );
 }
+

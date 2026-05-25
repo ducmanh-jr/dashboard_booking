@@ -64,6 +64,25 @@ export class CompatController {
     } as never);
   }
 
+  /**
+   * Dành cho user đã login (qua Google) muốn nộp đơn làm đối tác.
+   * Không tạo user mới — chỉ nâng cấp user hiện tại lên partner.
+   */
+  @Post('partner/apply')
+  async applyPartner(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: Record<string, unknown>,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    await this.authService.applyAsPartner(user.id, {
+      businessName: (body.hotelName ?? body.businessName ?? body.fullName ?? '') as string,
+      phone: body.phone as string | undefined,
+    });
+    // Đăng xuất user khỏi phiên làm việc hiện tại và yêu cầu chờ phê duyệt
+    this.clearSessionCookies(response);
+    return { success: true, pending: true };
+  }
+
   @Public()
   @Get('public/rooms')
   searchRooms(@Query() query: Record<string, string>) {
@@ -371,5 +390,11 @@ export class CompatController {
     };
     response.cookie('session', token, options);
     response.cookie(`session_${userType}`, token, options);
+  }
+
+  private clearSessionCookies(response: Response): void {
+    for (const name of ['session', 'session_customer', 'session_partner', 'session_admin']) {
+      response.clearCookie(name, { path: '/' });
+    }
   }
 }

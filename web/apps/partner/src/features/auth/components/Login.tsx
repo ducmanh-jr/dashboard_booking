@@ -1,7 +1,9 @@
 import { FormEvent, useState } from "react";
-import { login, registerPartner } from "../../../api/authApi";
+import { login, registerPartner, googleLogin, applyAsPartner } from "../../../api/authApi";
 import { AuthLayout, GoogleButton } from "@nowayhome/auth-ui";
 import { User } from "../../../shared/types";
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
 
 const inputClass =
   "w-full h-[48px] pl-[44px] pr-[14px] rounded-xl border border-[#e2e8f0] bg-[#f8fafc]/50 text-sm text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#3b82f6] focus:bg-white focus:ring-4 focus:ring-[#3b82f6]/5 focus:shadow-[0_0_20px_rgba(59,130,246,0.1)] transition-all duration-300";
@@ -12,6 +14,8 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState<{ email: string; hotelName: string } | null>(null);
+  // Sau Google login: user là customer (chưa phải partner) → hỏi có muốn đăng ký partner không
+  const [googleUser, setGoogleUser] = useState<User | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -31,6 +35,105 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleGoogleCredential(credential: string) {
+    setErr("");
+    setLoading(true);
+    try {
+      const result = await googleLogin(credential);
+      const role = result.user?.role;
+
+      if (role === "partner") {
+        // Đã là partner → vào dashboard luôn
+        onLogin(result.user);
+      } else if (role === "admin") {
+        throw new Error("Tài khoản admin không thể đăng nhập vào trang đối tác.");
+      } else {
+        // role === "customer" → chưa phải partner, hỏi có muốn đăng ký không
+        setGoogleUser(result.user);
+      }
+    } catch (error: any) {
+      setErr(error.message ?? "Đăng nhập Google thất bại");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Màn hình: đăng ký partner sau khi đã Google login thành công
+  if (googleUser) {
+    return (
+      <AuthLayout
+        title="Đăng ký trở thành đối tác"
+        subtitle={`Xin chào ${googleUser.fullName ?? googleUser.email}! Hãy điền thêm thông tin để đăng ký.`}
+      >
+        <div className="space-y-5">
+          <div className="rounded-xl border border-[#e2e8f0] bg-[#f0f9ff] p-4 text-sm text-[#0369a1]">
+            Tài khoản Google của bạn đã được xác minh. Điền thông tin bên dưới để gửi yêu cầu trở thành đối tác.
+          </div>
+
+          <div className="space-y-3">
+            <div className="relative">
+              <div className="absolute left-[14px] top-1/2 -translate-y-1/2 text-[#94a3b8]">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              </div>
+              <Input
+                placeholder="Tên khách sạn / cơ sở lưu trú"
+                value={form.hotelName}
+                onChange={(v) => setForm({ ...form, hotelName: v })}
+                required
+                className={inputClass}
+              />
+            </div>
+            <div className="relative">
+              <div className="absolute left-[14px] top-1/2 -translate-y-1/2 text-[#94a3b8]">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l2.31-2.31a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              </div>
+              <Input
+                placeholder="Số điện thoại"
+                value={form.phone}
+                onChange={(v) => setForm({ ...form, phone: v })}
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          {err && <div className="text-xs font-medium text-destructive">{err}</div>}
+
+          <div className="space-y-3">
+            <button
+              disabled={loading || !form.hotelName}
+              onClick={async () => {
+                setErr("");
+                setLoading(true);
+                try {
+                  await applyAsPartner({
+                    hotelName: form.hotelName,
+                    phone: form.phone || undefined,
+                  });
+                  setPending({ email: googleUser.email, hotelName: form.hotelName });
+                  setGoogleUser(null);
+                } catch (error: any) {
+                  setErr(error.message ?? "Đăng ký thất bại");
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              className="w-full h-[48px] rounded-full bg-gradient-to-r from-[#3b82f6] to-[#2563eb] text-white text-sm font-bold shadow-md shadow-blue-500/10 hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.98] disabled:opacity-50 transition-all duration-200"
+            >
+              {loading ? "Đang gửi..." : "Gửi yêu cầu đăng ký đối tác"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setGoogleUser(null)}
+              className="w-full text-sm text-[#64748b] hover:text-[#0f172a] transition-colors"
+            >
+              Quay lại
+            </button>
+          </div>
+        </div>
+      </AuthLayout>
+    );
   }
 
   if (pending) {
@@ -129,7 +232,7 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
             {loading ? "Processing..." : mode === "login" ? "Sign in" : "Sign up"}
           </button>
 
-          {mode === "login" && (
+          {mode === "login" && GOOGLE_CLIENT_ID && (
             <>
               <div className="relative py-1">
                 <div className="absolute inset-0 flex items-center" aria-hidden="true">
@@ -139,7 +242,11 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
                   <span className="bg-[#fcfdfe] px-2 text-[#94a3b8]">Or continue with</span>
                 </div>
               </div>
-              <GoogleButton href="/api/auth/google/start" />
+              <GoogleButton
+                clientId={GOOGLE_CLIENT_ID}
+                onCredential={handleGoogleCredential}
+                label={loading ? "Processing..." : "Sign in with Google"}
+              />
             </>
           )}
         </div>
