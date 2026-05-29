@@ -1,0 +1,19 @@
+{
+  "name": "nowayhome-web",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/admin",
+    "apps/partner",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:admin": "npm --workspace apps/admin run dev",
+    "dev:partner": "npm --workspace apps/partner run dev",
+    "typecheck": "npm run typecheck:admin && npm run typecheck:partner",
+    "typecheck:admin": "pnpm --filter webadmin exec tsc -p tsconfig.json --noEmit",
+    "typecheck:partner": "pnpm --filter webpartner exec tsc -p tsconfig.json --noEmit",
+    "build:admin": "npm --workspace apps/admin run build",
+    "build:partner": "npm --workspace apps/partner run build"
+  }
+}

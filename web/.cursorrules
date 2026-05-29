@@ -1,0 +1,23 @@
+# LUẬT VẬN HÀNH AI - NOWAYHOME WEB APP (REACT/VITE)
+
+## 1. NGUYÊN TẮC CỐT LÕI (KARPATHY PRINCIPLES)
+
+- Surgical Changes: Tập trung vào scope công việc, không format lại toàn bộ file.
+- Simplicity First: Code Functional Component đơn giản.
+- Think Before Coding: Phân tích UI states (Loading, Success, Error) trước khi viết JSX.
+
+## 2. RÀNG BUỘC CÔNG NGHỆ (WEB FRONTEND)
+
+- State Management: Dùng `useState` cho local state. Dùng `Zustand` cho global state. CẤM dùng Redux.
+- Styling: Sử dụng Tailwind CSS. Phải có style cho 3 trạng thái của nút bấm: hover, active, disabled.
+- TypeScript: Bắt buộc định nghĩa interface rõ ràng từ Schema. Cấm dùng kiểu `any`.
+- Tách biệt: Thư mục gọi API (`axios`) phải tách rời khỏi thư mục UI Component.
+
+## 3.QUY TẮC DỮ LIỆU VÀ API (DATABASE & API CONSTRAINTS)
+
+- Kiểm tra dữ liệu: Trước khi thực hiện thao tác INSERT, UPDATE, DELETE, AI bắt buộc phải thực hiện câu lệnh SELECT để kiểm tra sự tồn tại của dữ liệu (ví dụ: SELECT * FROM users WHERE id = ?). Không Insert hoặc Update khi chưa biết dữ liệu hiện tại.
+- Bảo toàn dữ liệu (Safe Updates):
+    - Khi thực hiện UPDATE, tuyệt đối KHÔNG ghi đè lên các trường quan trọng như khóa ngoại (foreign keys: project_id, employee_id, task_id) trừ khi có yêu cầu cụ thể.
+    - Trường hợp cần thay đổi trạng thái (status), chỉ update cột đó. Các cột liên quan khác phải giữ nguyên giá trị cũ để tránh lỗi referential integrity.
+- Validate dữ liệu (Input Validation):
+    - Đối với các trường có ràng buộc (foreign keys), AI phải tự động tạo logic kiểm tra: Nếu không có dữ liệu đầu vào (ví dụ: input.project_id = "" hoặc null), AI phải dừng lại và yêu cầu người dùng cung cấp thông tin hoặc tự động tạo bản ghi mới cho bảng liên quan.

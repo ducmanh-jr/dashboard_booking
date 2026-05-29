@@ -1,0 +1,11 @@
+{
+  "scripts": {
+    "check": "pnpm -r run check",
+    "build:web": "pnpm --filter web run build:admin && pnpm --filter web run build:partner",
+    "db:migrate": "pnpm --filter backend exec prisma migrate deploy --schema prisma/schema.prisma",
+    "db:export": "powershell -ExecutionPolicy Bypass -File database/snapshots/export.ps1",
+    "db:reset": "powershell -ExecutionPolicy Bypass -File database/baseline/import.ps1",
+    "db:migrate:legacy-dry": "node database/migration/migrate-legacy-snapshot.mjs --dry-run",
+    "db:migrate:legacy": "node database/migration/migrate-legacy-snapshot.mjs --reset"
+  }
+}
