@@ -64,6 +64,14 @@ function IconAccount() {
   );
 }
 
+function IconCard() {
+  return (
+    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+    </svg>
+  );
+}
+
 function IconLogout() {
   return (
     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -81,12 +89,35 @@ export function PartnerLayout({ user, onLogout }: { user: User; onLogout: () => 
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchNotifications()
-      .then((result) => {
-        cachedNotifications = result.notifications || [];
-        setNotifications(cachedNotifications);
-      })
-      .catch(() => {});
+    const load = () => {
+      fetchNotifications()
+        .then((result) => {
+          cachedNotifications = result.notifications || [];
+          setNotifications(cachedNotifications);
+        })
+        .catch(() => {});
+    };
+
+    load();
+    window.addEventListener("notifications-updated", load);
+    
+    const handleNotificationAction = (e: any) => {
+      const { type, id } = e.detail;
+      setNotifications(prev => {
+        let next = prev;
+        if (type === 'read-all') next = prev.map(n => ({...n, isRead: true}));
+        else if (type === 'read') next = prev.map(n => n.id === id ? {...n, isRead: true} : n);
+        else if (type === 'remove') next = prev.filter(n => n.id !== id);
+        cachedNotifications = next;
+        return next;
+      });
+    };
+    window.addEventListener("notifications-action", handleNotificationAction);
+
+    return () => {
+      window.removeEventListener("notifications-updated", load);
+      window.removeEventListener("notifications-action", handleNotificationAction);
+    };
   }, [location.pathname]);
 
   async function logout() {
@@ -102,6 +133,7 @@ export function PartnerLayout({ user, onLogout }: { user: User; onLogout: () => 
     { label: "Tổng quan", description: "Hiệu suất kinh doanh", path: "/", icon: <IconDashboard /> },
     { label: "Khách sạn", description: "Hồ sơ & trạng thái", path: "/rooms", icon: <IconHotel /> },
     { label: "Đặt phòng", description: "Doanh thu & lưu trú", path: "/bookings", icon: <IconBookings /> },
+    { label: "Giao dịch", description: "Dòng tiền & ví", path: "/transactions", icon: <IconCard /> },
     { label: "Thêm khách sạn", description: "Tạo hồ sơ mới", path: "/create", icon: <IconPlus /> },
     { label: "Thông báo", description: "Phản hồi từ admin", path: "/notifications", count: unreadCount, icon: <IconBell /> },
     { label: "Tài khoản", description: "Hồ sơ & bảo mật", path: "/account", icon: <IconAccount /> },

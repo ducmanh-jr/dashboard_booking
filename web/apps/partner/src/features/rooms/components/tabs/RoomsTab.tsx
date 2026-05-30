@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchRooms, requestDeleteRoom, requestRestoreRoom, fetchAvailability, updateAvailability, bulkUpdateAvailability } from "../../../../api/roomsApi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Room } from "../../../../shared/types";
+import { RoomDetailModal } from "../modals/RoomDetailModal";
 
 type StatusFilter = "all" | "approved" | "pending" | "rejected" | "archived" | "request";
 
@@ -88,7 +89,9 @@ function filterLabel(filter: StatusFilter) {
 
 let cachedRooms: Room[] | null = null;
 
-export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
+
+export function RoomsTab() {
+  const [viewingRoom, setViewingRoom] = useState<Room | null>(null);
   const [rooms, setRooms] = useState<Room[]>(cachedRooms || []);
   const [loading, setLoading] = useState(!cachedRooms);
   const [filter, setFilter] = useState<StatusFilter>("all");
@@ -266,103 +269,100 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
             return (
               <article
                 key={room.id}
+                onClick={() => setViewingRoom(room)}
                 className={cn(
-                  "overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:border-primary/40 hover:shadow-md flex flex-col sm:flex-row sm:items-stretch",
+                  "group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition cursor-pointer hover:border-primary/40 hover:shadow-md flex flex-col sm:flex-row sm:items-stretch",
                   (room.pendingRequest?.action === "delete" || isArchivedRoom(room)) && "opacity-60 bg-slate-50"
                 )}
               >
-                <button
-                  type="button"
-                  onClick={() => onDetail(room)}
-                  className="relative w-full h-44 sm:h-auto sm:w-[152px] overflow-hidden bg-slate-50 border-b sm:border-b-0 sm:border-r border-slate-100 text-left flex-shrink-0 outline-none"
-                >
+                {/* Thumbnail */}
+                <div className="relative w-full h-44 sm:h-auto sm:w-[152px] overflow-hidden bg-slate-50 border-b sm:border-b-0 sm:border-r border-slate-100 shrink-0">
                   {thumbnail ? (
-                    <img src={thumbnail} alt={room.name} className="absolute inset-0 h-full w-full object-cover transition duration-300 hover:scale-105" />
+                    <img src={thumbnail} alt={room.name} className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-105" />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-400">Chưa có ảnh</div>
                   )}
-                </button>
+                </div>
 
-                <div className="flex-1 min-w-0 p-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <h3 className="truncate text-sm font-bold text-slate-950">{room.name}</h3>
-                      <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase", statusClass(room.status))}>
-                        {statusLabel(room.status)}
+                {/* Content */}
+                <div className="flex-1 min-w-0 p-3.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <h3 className="truncate text-sm font-bold text-slate-950 group-hover:text-primary transition-colors">{room.name}</h3>
+                    <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase", statusClass(room.status))}>
+                      {statusLabel(room.status)}
+                    </span>
+                    {hasPendingRequest && (
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-700">
+                        {requestLabel(room.pendingRequest)}
                       </span>
-                      {hasPendingRequest && (
-                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-700">
-                          {requestLabel(room.pendingRequest)}
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">{room.address}</p>
-
-                    <div className="mt-2.5 grid grid-cols-2 gap-1.5 text-xs sm:grid-cols-4">
-                      <InlineMetric label="Loại" value={room.roomType} />
-                      <InlineMetric label="Giá từ" value={minPrice ? `${fmtVnd(minPrice)}/đêm` : "-"} />
-                      <InlineMetric label="Sức chứa" value={`${room.capacity} khách`} />
-                      <InlineMetric label="Ảnh" value={`${room.images.length}`} />
-                    </div>
-
-                    {room.status === "rejected" && room.rejectReason && (
-                      <div className="mt-2 rounded-md border border-red-100 bg-red-50 px-2.5 py-1.5 text-[11px] font-medium text-red-700">
-                        Lý do từ chối: {room.rejectReason}
-                      </div>
-                    )}
-
-                    {room.pendingRequest?.note && (
-                      <div className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-800">
-                        Ghi chú admin: {room.pendingRequest.note}
-                      </div>
-                    )}
-                    {isArchivedRoom(room) && (
-                      <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-medium text-slate-600">
-                        Khách sạn đã ngừng hoạt động. Bạn chỉ có thể xem lịch sử, không thể mở bán hoặc chỉnh tồn kho.
-                      </div>
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-1 border-t pt-2.5 lg:w-[108px] lg:flex-col lg:items-stretch lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0 lg:border-slate-100/80">
+                  <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">{room.address}</p>
+
+                  <div className="mt-2.5 grid grid-cols-2 gap-1.5 text-xs sm:grid-cols-4">
+                    <InlineMetric label="Loại" value={room.roomType} />
+                    <InlineMetric label="Giá từ" value={minPrice ? `${fmtVnd(minPrice)}/đêm` : "-"} />
+                    <InlineMetric label="Sức chứa" value={`${room.capacity} khách`} />
+                    <InlineMetric label="Ảnh" value={`${room.images.length}`} />
+                  </div>
+
+                  {room.status === "rejected" && room.rejectReason && (
+                    <div className="mt-2 rounded-md border border-red-100 bg-red-50 px-2.5 py-1.5 text-[11px] font-medium text-red-700">
+                      Lý do từ chối: {room.rejectReason}
+                    </div>
+                  )}
+                  {room.pendingRequest?.note && (
+                    <div className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-800">
+                      Ghi chú admin: {room.pendingRequest.note}
+                    </div>
+                  )}
+                  {isArchivedRoom(room) && (
+                    <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-medium text-slate-600">
+                      Khách sạn đã ngừng hoạt động. Bạn chỉ có thể xem lịch sử.
+                    </div>
+                  )}
+
+                  {/* Quick actions — click vào đây không trigger onDetail của article */}
+                  <div
+                    className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap gap-1.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <button
                       type="button"
-                      onClick={() => onDetail(room)}
-                      className="rounded-md border border-indigo-100/50 bg-indigo-50/40 px-2 py-1 text-[10.5px] font-bold text-indigo-600 transition hover:bg-indigo-50/80"
-                    >
-                      Chi tiết
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAvailabilityRoom(room)}
+                      onClick={() => { setAvailabilityRoom(room); }}
                       disabled={isArchivedRoom(room)}
-                      className="rounded-md border border-emerald-100/50 bg-emerald-50/40 px-2 py-1 text-[10.5px] font-bold text-emerald-600 transition hover:bg-emerald-50/80"
+                      className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10.5px] font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
+                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                       Tồn kho
                     </button>
                     <button
                       type="button"
                       onClick={() => navigate(`/edit/${room.id}`)}
                       disabled={hasPendingRequest || isArchivedRoom(room)}
-                      className="rounded-md border border-slate-200/50 bg-white px-2 py-1 text-[10.5px] font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[10.5px] font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      Sửa
+                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      Chỉnh sửa
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => requestDelete(room)}
-                      disabled={hasPendingRequest || isArchivedRoom(room)}
-                      className="rounded-md border border-rose-100/50 bg-rose-50/40 px-2 py-1 text-[10.5px] font-bold text-rose-600 transition hover:bg-rose-100/80 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Yêu cầu xóa
-                    </button>
-                    {isArchivedRoom(room) && (
+                    {isArchivedRoom(room) ? (
                       <button
                         type="button"
                         onClick={() => requestRestore(room)}
-                        className="rounded-md border border-indigo-100 bg-indigo-50 px-2 py-1 text-[10.5px] font-bold text-indigo-600 transition hover:bg-indigo-100"
+                        className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[10.5px] font-bold text-indigo-700 transition hover:bg-indigo-100"
                       >
                         Khôi phục
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => requestDelete(room)}
+                        disabled={hasPendingRequest}
+                        className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10.5px] font-bold text-rose-600 transition hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        Yêu cầu xóa
                       </button>
                     )}
                   </div>
@@ -374,6 +374,12 @@ export function RoomsTab({ onDetail }: { onDetail: (room: Room) => void }) {
       )}
       {availabilityRoom && (
         <AvailabilityModal room={availabilityRoom} onClose={() => setAvailabilityRoom(null)} />
+      )}
+      {viewingRoom && (
+        <RoomDetailModal
+          room={viewingRoom}
+          onClose={() => setViewingRoom(null)}
+        />
       )}
     </div>
   );
@@ -416,12 +422,27 @@ function addDays(dateText: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+/** Safely parse any date string — handles both "2026-05-30" and full ISO timestamps */
+function parseDate(dateText: string): Date {
+  if (!dateText) return new Date(NaN);
+  // If already a valid ISO-with-time string (e.g. from old Prisma serialization)
+  if (dateText.includes('T') || dateText.includes('Z')) {
+    return new Date(dateText);
+  }
+  // Plain date "2026-05-30" — parse in local time to avoid timezone shift
+  return new Date(`${dateText}T00:00:00`);
+}
+
 function fmtShortDate(dateText: string) {
-  return new Date(`${dateText}T00:00:00`).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+  const d = parseDate(dateText);
+  if (isNaN(d.getTime())) return "--/--";
+  return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
 }
 
 function fmtWeekday(dateText: string) {
-  return new Date(`${dateText}T00:00:00`).toLocaleDateString("vi-VN", { weekday: "short" });
+  const d = parseDate(dateText);
+  if (isNaN(d.getTime())) return "---";
+  return d.toLocaleDateString("vi-VN", { weekday: "short" });
 }
 
 function AvailabilityModal({ room, onClose }: { room: Room; onClose: () => void }) {

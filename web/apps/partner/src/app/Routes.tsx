@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom";
 import { fetchRoomDetail } from "../api/roomsApi";
 
@@ -8,30 +8,16 @@ import { RoomsTab } from "../features/rooms/components/tabs/RoomsTab";
 import { BookingsTab } from "../features/rooms/components/tabs/BookingsTab";
 import { NotificationsTab } from "../features/rooms/components/tabs/NotificationsTab";
 import { RoomEditorForm } from "../features/rooms/components/RoomEditorForm";
-import { RoomDetailModal } from "../features/rooms/components/modals/RoomDetailModal";
 import { Login } from "../features/auth/components/Login";
-import { API_PATHS } from "../constants/apiPaths";
 import { DashboardTab } from "../features/rooms/components/tabs/DashboardTab";
 import { AccountSettingsPage } from "../features/account/components/AccountSettingsPage";
-
-function RoomsPage({ onDetail }: { onDetail: (room: Room) => void }) {
-  const [viewingRoom, setViewingRoom] = useState<Room | null>(null);
-  
-  return (
-    <>
-      <RoomsTab onDetail={(room) => { setViewingRoom(room); if (onDetail) onDetail(room); }} />
-      {viewingRoom && (
-        <RoomDetailModal room={viewingRoom} onClose={() => setViewingRoom(null)} />
-      )}
-    </>
-  );
-}
+import { TransactionsPage } from "../features/transactions/components/TransactionsPage";
 
 function CreateRoomPage() {
   const navigate = useNavigate();
   return (
-    <RoomEditorForm 
-      mode="create" 
+    <RoomEditorForm
+      mode="create"
       onDone={(msg) => {
         navigate("/", { state: { message: msg } });
       }}
@@ -63,8 +49,8 @@ function EditRoomPage() {
   if (!room) return <div className="text-center py-10 text-red-600 font-bold">Không tìm thấy phòng!</div>;
 
   return (
-    <RoomEditorForm 
-      mode="edit" 
+    <RoomEditorForm
+      mode="edit"
       room={room}
       onDone={(msg) => {
         navigate("/", { state: { message: msg } });
@@ -94,15 +80,16 @@ export function AppRoutes({ user, onLogin, onLogout }: AppRoutesProps) {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={(u) => { onLogin(u); navigate("/"); }} />} />
-      
+
       {/* Persistent Layout Wrapper */}
       <Route element={user ? <PartnerLayout user={user} onLogout={onLogout} /> : <Navigate to="/login" />}>
         <Route path="/" element={<DashboardTab />} />
-        <Route path="/rooms" element={<RoomsPage onDetail={() => {}} />} />
+        <Route path="/rooms" element={<RoomsTab />} />
         <Route path="/bookings" element={<BookingsPage />} />
         <Route path="/create" element={<CreateRoomPage />} />
         <Route path="/edit/:id" element={<EditRoomPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/account" element={<AccountSettingsPage />} />
       </Route>
 

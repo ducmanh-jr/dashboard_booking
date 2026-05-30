@@ -10,7 +10,8 @@ import {
   LogOut,
   Menu,
   UserCog,
-  X
+  X,
+  CreditCard
 } from "lucide-react";
 import { useState } from "react";
 import { User } from "../types";
@@ -27,6 +28,7 @@ export function AdminLayout({ user, onLogout, notificationCount }: { user: User;
     { path: "/bookings", label: "Đặt phòng", icon: CalendarCheck },
     { path: "/rooms", label: "Khách sạn", icon: Hotel },
     { path: "/admins", label: "Quản trị viên", icon: ShieldCheck },
+    { path: "/transactions", label: "Giao dịch", icon: CreditCard },
     { path: "/notifications", label: "Thông báo", icon: Bell, count: notificationCount },
     { path: "/account", label: "Tài khoản", icon: UserCog },
   ];

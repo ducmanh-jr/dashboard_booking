@@ -18,6 +18,8 @@ import {
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { v2 as cloudinary } from 'cloudinary';
+import * as fs from 'fs';
+import * as path from 'path';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
@@ -947,26 +949,109 @@ export class CompatService {
 
   async availability(user: AuthenticatedUser, query: Record<string, string>) {
     const partner = await this.partnerProfile(user);
+    const propertyId = this.parseId(query.propertyId, 'Ma khach san khong hop le');
     const property = await this.prisma.property.findFirst({
-      where: { id: this.parseId(query.propertyId, 'Ma khach san khong hop le'), partnerId: partner.id },
-      include: { roomTypes: { include: { ratePlans: { include: { dailyRates: true } } } } },
+      where: { id: propertyId, partnerId: partner.id },
+      include: {
+        roomTypes: {
+          include: {
+            ratePlans: {
+              include: {
+                dailyRates: true,
+                // Use the correct relation: RatePlan has bookings[]
+                bookings: true,
+              },
+            },
+          },
+        },
+      },
     });
     if (!property) throw new ForbiddenException('Khong co quyen truy cap');
+
+    const fromDate = query.from ? new Date(`${query.from}T00:00:00Z`) : new Date();
+    const toDate = query.to ? new Date(`${query.to}T00:00:00Z`) : new Date(Date.now() + 30 * 86400000);
+
+    // Build list of dates in range
+    const allDates: string[] = [];
+    for (const cursor = new Date(fromDate); cursor <= toDate; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+      allDates.push(cursor.toISOString().slice(0, 10));
+    }
+
     return {
       propertyId: property.id,
       propertyName: property.name,
       isArchived: this.isArchivedProperty(property),
       isBookable: property.status === property_status_enum.active && !property.deletedAt,
       prices: property.roomTypes.flatMap((roomType) =>
-        roomType.ratePlans.map((ratePlan) => ({
-          priceId: ratePlan.id,
-          label: ratePlan.name,
-          pricePerNight: Number(ratePlan.basePrice),
-          totalInventory: roomType.totalRooms,
-          minRemaining: Math.min(...ratePlan.dailyRates.map((rate) => rate.availableQty), roomType.totalRooms),
-          isAvailable: true,
-          days: ratePlan.dailyRates,
-        })),
+        roomType.ratePlans.map((ratePlan) => {
+          // Map dailyRate overrides by date string
+          const rateByDate = new Map(
+            ratePlan.dailyRates.map((r) => [r.date.toISOString().slice(0, 10), r]),
+          );
+
+          // Count booked rooms per stay-date from active bookings on this ratePlan
+          const bookedByDate = new Map<string, number>();
+          const activeStatuses = ['pending', 'confirmed', 'checked_in', 'checked_out'];
+          for (const bk of ratePlan.bookings ?? []) {
+            if (!activeStatuses.includes(bk.status as string)) continue;
+            const checkIn = new Date(bk.checkInDate);
+            const checkOut = new Date(bk.checkOutDate);
+            if (isNaN(checkIn.getTime()) || isNaN(checkOut.getTime())) continue;
+            // Each night from checkIn up to (not including) checkOut
+            for (
+              const d = new Date(checkIn);
+              d < checkOut;
+              d.setUTCDate(d.getUTCDate() + 1)
+            ) {
+              const key = d.toISOString().slice(0, 10);
+              bookedByDate.set(key, (bookedByDate.get(key) ?? 0) + 1);
+            }
+          }
+
+          const days = allDates.map((dateStr) => {
+            const override = rateByDate.get(dateStr);
+            // isClosed = explicit override with availableQty=0 and no current bookings
+            const booked = bookedByDate.get(dateStr) ?? 0;
+            const isClosed = override
+              ? override.availableQty === 0 && booked === 0
+              : false;
+            const totalInventory = isClosed
+              ? 0
+              : (override ? override.availableQty : roomType.totalRooms);
+            const remaining = Math.max(0, totalInventory - booked);
+            const pricePerNight = override
+              ? Number(override.price)
+              : Number(ratePlan.basePrice);
+            const isSoldOut = !isClosed && remaining === 0 && booked > 0;
+
+            return {
+              date: dateStr,
+              totalInventory: isClosed ? 0 : (override ? override.availableQty : roomType.totalRooms),
+              booked,
+              remaining,
+              pricePerNight,
+              isClosed,
+              hasOverride: !!override,
+              isSoldOut,
+            };
+          });
+
+          const openDays = days.filter((d) => !d.isClosed);
+          const minRemaining = openDays.length > 0
+            ? Math.min(...openDays.map((d) => d.remaining))
+            : roomType.totalRooms;
+          const isAvailable = days.some((d) => !d.isClosed && !d.isSoldOut && d.remaining > 0);
+
+          return {
+            priceId: ratePlan.id,
+            label: ratePlan.name,
+            pricePerNight: Number(ratePlan.basePrice),
+            totalInventory: roomType.totalRooms,
+            minRemaining,
+            isAvailable,
+            days,
+          };
+        }),
       ),
     };
   }
@@ -974,7 +1059,8 @@ export class CompatService {
   async updateAvailability(user: AuthenticatedUser, body: AnyBody) {
     const partner = await this.partnerProfile(user);
     const ratePlanId = this.parseId(body.priceId, 'Ma goi gia khong hop le');
-    const date = this.dateOnly(body.stayDate);
+    // Accept both stayDate (bulk internal) and date (from frontend single-day edit)
+    const date = this.dateOnly(body.stayDate ?? body.date);
     const ratePlan = await this.prisma.ratePlan.findUnique({
       where: { id: ratePlanId },
       include: { roomType: { include: { property: true } } },
@@ -986,33 +1072,54 @@ export class CompatService {
     if (ratePlan.roomType.property.status !== property_status_enum.active || ratePlan.roomType.property.deletedAt) {
       throw new BadRequestException('Khach san da ngung hoat dong, khong the mo ban hoac chinh ton kho');
     }
+    // Accept frontend field names: pricePerNight/openInventory AND legacy: price/inventory
+    const newPrice = body.pricePerNight ?? body.price;
+    const newInventory = body.openInventory ?? body.inventory;
+    // isClosed: if true, set availableQty=0
+    const resolvedInventory = body.isClosed ? 0 : (newInventory !== undefined ? Number(newInventory) : undefined);
+    // reset: delete override so it falls back to base values
+    if (body.reset) {
+      await this.prisma.dailyRate.deleteMany({ where: { ratePlanId, date } });
+      return { ok: true };
+    }
     await this.prisma.dailyRate.upsert({
       where: { ratePlanId_date: { ratePlanId, date } },
       create: {
         ratePlanId,
         date,
-        price: Number(body.price ?? ratePlan.basePrice),
-        availableQty: Number(body.inventory ?? ratePlan.roomType.totalRooms),
+        price: newPrice !== undefined ? Number(newPrice) : Number(ratePlan.basePrice),
+        availableQty: resolvedInventory !== undefined ? resolvedInventory : ratePlan.roomType.totalRooms,
       },
       update: {
-        price: body.price === undefined ? undefined : Number(body.price),
-        availableQty: body.inventory === undefined ? undefined : Number(body.inventory),
+        price: newPrice !== undefined ? Number(newPrice) : undefined,
+        availableQty: resolvedInventory !== undefined ? resolvedInventory : undefined,
       },
     });
     return { ok: true };
   }
 
   async bulkUpdateAvailability(user: AuthenticatedUser, body: AnyBody) {
-    const start = this.dateOnly(body.startDate);
-    const end = this.dateOnly(body.endDate);
+    // Accept both startDate/endDate (legacy) and from/to (frontend current)
+    const start = this.dateOnly(body.startDate ?? body.from);
+    const end = body.applyForever
+      ? new Date(start.getTime() + 365 * 86400000)
+      : this.dateOnly(body.endDate ?? body.to);
     if (end < start) throw new BadRequestException('Khoang ngay khong hop le');
     const maxDays = 366;
     const totalDays = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
     if (totalDays > maxDays) throw new BadRequestException('Chi duoc cap nhat toi da 366 ngay moi lan');
+    let updated = 0;
+    const skipped: string[] = [];
     for (const cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
-      await this.updateAvailability(user, { ...body, stayDate: cursor.toISOString().slice(0, 10) });
+      const dateStr = cursor.toISOString().slice(0, 10);
+      try {
+        await this.updateAvailability(user, { ...body, stayDate: dateStr });
+        updated++;
+      } catch {
+        skipped.push(dateStr);
+      }
     }
-    return { ok: true };
+    return { ok: true, updated, skipped };
   }
 
   async notifications(user: AuthenticatedUser) {
@@ -1653,13 +1760,15 @@ export class CompatService {
     const checkOut = this.toDateKey(booking.checkOutDate);
     const today = this.todayDateKey();
     const isCancelled = booking.status === 'cancelled';
-    const isCompleted =
-      !isCancelled &&
-      (booking.status === 'checked_out' || checkOut <= today);
     const isCurrentStay =
       !isCancelled &&
       (booking.status === 'checked_in' ||
         (booking.status === 'confirmed' && checkIn <= today && checkOut > today));
+    // Khách đang checked_in chưa phải là "completed" dù đã qua ngày checkout
+    const isCompleted =
+      !isCancelled &&
+      !isCurrentStay &&
+      (booking.status === 'checked_out' || checkOut <= today);
     const isFutureStay =
       !isCancelled &&
       ['pending', 'confirmed'].includes(booking.status) &&
@@ -1918,5 +2027,604 @@ export class CompatService {
   private starFromText(value: string) {
     const match = /([1-5])/.exec(value);
     return match ? Number(match[1]) : null;
+  }
+
+  private getDbPath() {
+    return path.join(process.cwd(), 'nowayhome_pay_db.json');
+  }
+
+  private readPayDb() {
+    const dbPath = this.getDbPath();
+    if (!fs.existsSync(dbPath)) {
+      fs.writeFileSync(dbPath, JSON.stringify({ partners: {} }, null, 2));
+    }
+    try {
+      return JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+    } catch {
+      return { partners: {} };
+    }
+  }
+
+  private writePayDb(data: any) {
+    fs.writeFileSync(this.getDbPath(), JSON.stringify(data, null, 2));
+  }
+
+  async getNowayhomePayStatus(user: AuthenticatedUser) {
+    const partner = await this.partnerProfile(user);
+    const db = this.readPayDb();
+    const partnerIdStr = partner.id.toString();
+    const regData = db.partners[partnerIdStr] || { registered: false };
+
+    if (!regData.registered) {
+      return { registered: false };
+    }
+
+    const properties = await this.prisma.property.findMany({
+      where: { partnerId: partner.id },
+      include: {
+        bookings: {
+          include: { customer: true, roomType: true },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    let walletBalance = 0;
+    const transactions: any[] = [];
+    const today = this.todayDateKey();
+
+    for (const property of properties) {
+      for (const booking of property.bookings) {
+        const checkIn = this.toDateKey(booking.checkInDate);
+        const checkOut = this.toDateKey(booking.checkOutDate);
+        const isCancelled = booking.status === 'cancelled';
+        const isCurrentStay =
+          !isCancelled &&
+          (booking.status === 'checked_in' ||
+            (booking.status === 'confirmed' && checkIn <= today && checkOut > today));
+        const isCompleted =
+          !isCancelled &&
+          !isCurrentStay &&
+          (booking.status === 'checked_out' || checkOut <= today);
+
+        if (isCompleted) {
+          const totalAmount = Number(booking.totalAmount);
+          const platformFeeAmount = Number(booking.platformFeeAmount);
+          const partnerPayoutAmount = Number(booking.partnerPayoutAmount);
+
+          if (booking.paymentStatus === 'paid') {
+            transactions.push({
+              id: `TX-CUST-${booking.id}`,
+              bookingCode: booking.bookingCode,
+              hotelName: property.name,
+              partnerName: partner.businessName,
+              amount: totalAmount,
+              type: 'CUSTOMER_PAY',
+              method: 'ONLINE',
+              status: 'SUCCESS',
+              createdAt: booking.createdAt,
+            });
+            transactions.push({
+              id: `TX-SYS-${booking.id}`,
+              bookingCode: booking.bookingCode,
+              hotelName: property.name,
+              partnerName: partner.businessName,
+              amount: partnerPayoutAmount,
+              type: 'SYSTEM_PAY_TO_PARTNER',
+              method: 'ONLINE',
+              status: 'SUCCESS',
+              createdAt: booking.createdAt,
+            });
+            walletBalance += partnerPayoutAmount;
+          } else {
+            transactions.push({
+              id: `TX-COMM-${booking.id}`,
+              bookingCode: booking.bookingCode,
+              hotelName: property.name,
+              partnerName: partner.businessName,
+              amount: platformFeeAmount,
+              type: 'COMMISSION_DEDUCTION',
+              method: 'CASH',
+              status: 'SUCCESS',
+              createdAt: booking.createdAt,
+            });
+            walletBalance -= platformFeeAmount;
+          }
+        }
+      }
+    }
+
+    const partnerDepositsAndWithdrawals = regData.partnerDepositsAndWithdrawals || [];
+    for (const tx of partnerDepositsAndWithdrawals) {
+      if (tx.type === 'DEPOSIT') {
+        walletBalance += Number(tx.amount);
+      } else if (tx.type === 'WITHDRAW') {
+        walletBalance -= Number(tx.amount);
+      }
+    }
+
+    transactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return {
+      registered: true,
+      bankName: regData.bankName,
+      bankAccountNumber: regData.bankAccountNumber,
+      bankAccountHolder: regData.bankAccountHolder,
+      virtualCustomerAccountNumber: regData.virtualCustomerAccountNumber,
+      walletBalance,
+      transactions,
+      depositsAndWithdrawals: partnerDepositsAndWithdrawals,
+    };
+  }
+
+  async registerNowayhomePay(user: AuthenticatedUser, body: Record<string, unknown>) {
+    const partner = await this.partnerProfile(user);
+    const db = this.readPayDb();
+    const partnerIdStr = partner.id.toString();
+    const randomAccountNumber = 'NWH-PAY-' + Math.floor(100000 + Math.random() * 900000);
+
+    db.partners[partnerIdStr] = {
+      registered: true,
+      bankName: body.bankName,
+      bankAccountNumber: body.bankAccountNumber,
+      bankAccountHolder: body.bankAccountHolder || partner.businessName,
+      virtualCustomerAccountNumber: randomAccountNumber,
+    };
+
+    this.writePayDb(db);
+    return { success: true };
+  }
+
+  async getAdminTransactions() {
+    const properties = await this.prisma.property.findMany({
+      include: {
+        partner: { include: { user: true } },
+        bookings: {
+          include: { customer: true },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    const transactions: any[] = [];
+    const today = this.todayDateKey();
+
+    for (const property of properties) {
+      const partner = property.partner;
+      const partnerName = partner.businessName;
+
+      for (const booking of property.bookings) {
+        const checkIn = this.toDateKey(booking.checkInDate);
+        const checkOut = this.toDateKey(booking.checkOutDate);
+        const isCancelled = booking.status === 'cancelled';
+        const isCurrentStay =
+          !isCancelled &&
+          (booking.status === 'checked_in' ||
+            (booking.status === 'confirmed' && checkIn <= today && checkOut > today));
+        const isCompleted =
+          !isCancelled &&
+          !isCurrentStay &&
+          (booking.status === 'checked_out' || checkOut <= today);
+
+        if (isCompleted) {
+          const totalAmount = Number(booking.totalAmount);
+          const platformFeeAmount = Number(booking.platformFeeAmount);
+          const partnerPayoutAmount = Number(booking.partnerPayoutAmount);
+
+          if (booking.paymentStatus === 'paid') {
+            transactions.push({
+              id: `TX-CUST-${booking.id}`,
+              bookingCode: booking.bookingCode,
+              hotelName: property.name,
+              partnerName,
+              amount: totalAmount,
+              type: 'CUSTOMER_PAY',
+              method: 'ONLINE',
+              status: 'SUCCESS',
+              createdAt: booking.createdAt,
+            });
+            transactions.push({
+              id: `TX-SYS-${booking.id}`,
+              bookingCode: booking.bookingCode,
+              hotelName: property.name,
+              partnerName,
+              amount: partnerPayoutAmount,
+              type: 'SYSTEM_PAY_TO_PARTNER',
+              method: 'ONLINE',
+              status: 'SUCCESS',
+              createdAt: booking.createdAt,
+            });
+          } else {
+            transactions.push({
+              id: `TX-COMM-${booking.id}`,
+              bookingCode: booking.bookingCode,
+              hotelName: property.name,
+              partnerName,
+              amount: platformFeeAmount,
+              type: 'COMMISSION_DEDUCTION',
+              method: 'CASH',
+              status: 'SUCCESS',
+              createdAt: booking.createdAt,
+            });
+          }
+        }
+      }
+    }
+
+    transactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return { transactions };
+  }
+
+  async getAdminTransactionsDashboard(user: AuthenticatedUser) {
+    const db = this.readPayDb();
+    const today = this.todayDateKey();
+
+    const dbPartners = await this.prisma.partnerProfile.findMany({
+      include: {
+        user: true,
+        properties: {
+          include: {
+            bookings: {
+              include: { customer: true, roomType: true },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+        },
+      },
+    });
+
+    const transactions: any[] = [];
+    let platformFeeRevenue = 0;
+
+    const partners = dbPartners.map((p) => {
+      const partnerIdStr = p.id.toString();
+      const regData = db.partners[partnerIdStr] || { registered: false };
+      const partnerDepositsAndWithdrawals = regData.partnerDepositsAndWithdrawals || [];
+
+      let walletBalance = 0;
+
+      for (const property of p.properties) {
+        for (const booking of property.bookings) {
+          const checkIn = this.toDateKey(booking.checkInDate);
+          const checkOut = this.toDateKey(booking.checkOutDate);
+          const isCancelled = booking.status === 'cancelled';
+          const isCurrentStay =
+            !isCancelled &&
+            (booking.status === 'checked_in' ||
+              (booking.status === 'confirmed' && checkIn <= today && checkOut > today));
+          const isCompleted =
+            !isCancelled &&
+            !isCurrentStay &&
+            (booking.status === 'checked_out' || checkOut <= today);
+
+          if (isCompleted) {
+            const platformFeeAmount = Number(booking.platformFeeAmount);
+            const partnerPayoutAmount = Number(booking.partnerPayoutAmount);
+
+            if (booking.paymentStatus === 'paid') {
+              walletBalance += partnerPayoutAmount;
+            } else {
+              walletBalance -= platformFeeAmount;
+            }
+          }
+        }
+      }
+
+      for (const tx of partnerDepositsAndWithdrawals) {
+        if (tx.type === 'DEPOSIT') {
+          walletBalance += Number(tx.amount);
+        } else if (tx.type === 'WITHDRAW') {
+          walletBalance -= Number(tx.amount);
+        }
+      }
+
+      return {
+        id: p.id.toString(),
+        businessName: p.businessName,
+        email: p.user.email,
+        phone: p.user.phone || '',
+        registered: regData.registered,
+        bankName: regData.bankName || '',
+        bankAccountNumber: regData.bankAccountNumber || '',
+        bankAccountHolder: regData.bankAccountHolder || '',
+        virtualCustomerAccountNumber: regData.virtualCustomerAccountNumber || '',
+        walletBalance,
+        depositsAndWithdrawals: partnerDepositsAndWithdrawals,
+        propertyNames: p.properties.map((prop) => prop.name),
+      };
+    });
+
+    const properties = await this.prisma.property.findMany({
+      include: {
+        partner: { include: { user: true } },
+        bookings: {
+          include: { customer: true, roomType: true },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    for (const property of properties) {
+      const partner = property.partner;
+      for (const booking of property.bookings) {
+        const checkIn = this.toDateKey(booking.checkInDate);
+        const checkOut = this.toDateKey(booking.checkOutDate);
+        const isCancelled = booking.status === 'cancelled';
+        const isCurrentStay =
+          !isCancelled &&
+          (booking.status === 'checked_in' ||
+            (booking.status === 'confirmed' && checkIn <= today && checkOut > today));
+        const isCompleted =
+          !isCancelled &&
+          !isCurrentStay &&
+          (booking.status === 'checked_out' || checkOut <= today);
+
+        if (isCompleted) {
+          const totalAmount = Number(booking.totalAmount);
+          const platformFeeAmount = Number(booking.platformFeeAmount);
+          const partnerPayoutAmount = Number(booking.partnerPayoutAmount);
+
+          platformFeeRevenue += platformFeeAmount;
+
+          if (booking.paymentStatus === 'paid') {
+            transactions.push({
+              id: `TX-CUST-${booking.id}`,
+              bookingId: booking.id.toString(),
+              bookingCode: booking.bookingCode,
+              hotelName: property.name,
+              partnerName: partner.businessName,
+              customerName: booking.customer?.fullName || '',
+              customerEmail: booking.customer?.email || '',
+              checkInDate: checkIn,
+              checkOutDate: checkOut,
+              nights: booking.numNights,
+              amount: totalAmount,
+              platformFee: platformFeeAmount,
+              partnerPayout: partnerPayoutAmount,
+              type: 'CUSTOMER_PAY',
+              method: 'ONLINE',
+              status: 'SUCCESS',
+              createdAt: booking.createdAt,
+            });
+            transactions.push({
+              id: `TX-SYS-${booking.id}`,
+              bookingId: booking.id.toString(),
+              bookingCode: booking.bookingCode,
+              hotelName: property.name,
+              partnerName: partner.businessName,
+              customerName: booking.customer?.fullName || '',
+              customerEmail: booking.customer?.email || '',
+              checkInDate: checkIn,
+              checkOutDate: checkOut,
+              nights: booking.numNights,
+              amount: partnerPayoutAmount,
+              platformFee: platformFeeAmount,
+              partnerPayout: partnerPayoutAmount,
+              type: 'SYSTEM_PAY_TO_PARTNER',
+              method: 'ONLINE',
+              status: 'SUCCESS',
+              createdAt: booking.createdAt,
+            });
+          } else {
+            transactions.push({
+              id: `TX-COMM-${booking.id}`,
+              bookingId: booking.id.toString(),
+              bookingCode: booking.bookingCode,
+              hotelName: property.name,
+              partnerName: partner.businessName,
+              customerName: booking.customer?.fullName || '',
+              customerEmail: booking.customer?.email || '',
+              checkInDate: checkIn,
+              checkOutDate: checkOut,
+              nights: booking.numNights,
+              amount: platformFeeAmount,
+              platformFee: platformFeeAmount,
+              partnerPayout: partnerPayoutAmount,
+              type: 'COMMISSION_DEDUCTION',
+              method: 'CASH',
+              status: 'SUCCESS',
+              createdAt: booking.createdAt,
+            });
+          }
+        }
+      }
+    }
+
+    transactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const systemInfo = db.system || { initialBalance: 1125230, depositsAndWithdrawals: [], paidTaxes: [] };
+    const initialBalance = Number(systemInfo.initialBalance || 1125230);
+    const systemDepositsAndWithdrawals = systemInfo.depositsAndWithdrawals || [];
+    const paidTaxes = systemInfo.paidTaxes || [];
+
+    let systemDepositsSum = 0;
+    let systemWithdrawalsSum = 0;
+    for (const item of systemDepositsAndWithdrawals) {
+      if (item.type === 'DEPOSIT') {
+        systemDepositsSum += Number(item.amount);
+      } else if (item.type === 'WITHDRAW') {
+        systemWithdrawalsSum += Number(item.amount);
+      }
+    }
+
+    let paidTaxesSum = 0;
+    for (const item of paidTaxes) {
+      paidTaxesSum += Number(item.amount);
+    }
+
+    const systemBalance = initialBalance + platformFeeRevenue + systemDepositsSum - systemWithdrawalsSum - paidTaxesSum;
+
+    const monthlyTaxes: any[] = [];
+    const monthlyCommissions: Record<string, number> = {};
+
+    for (const property of properties) {
+      for (const booking of property.bookings) {
+        const checkIn = this.toDateKey(booking.checkInDate);
+        const checkOut = this.toDateKey(booking.checkOutDate);
+        const isCancelled = booking.status === 'cancelled';
+        const isCurrentStay =
+          !isCancelled &&
+          (booking.status === 'checked_in' ||
+            (booking.status === 'confirmed' && checkIn <= today && checkOut > today));
+        const isCompleted =
+          !isCancelled &&
+          !isCurrentStay &&
+          (booking.status === 'checked_out' || checkOut <= today);
+
+        if (isCompleted) {
+          const platformFeeAmount = Number(booking.platformFeeAmount);
+          const monthKey = booking.createdAt.toISOString().slice(0, 7);
+          monthlyCommissions[monthKey] = (monthlyCommissions[monthKey] || 0) + platformFeeAmount;
+        }
+      }
+    }
+
+    const startMonth = new Date(2026, 2, 1);
+    const endMonth = new Date();
+    
+    let currentMonth = new Date(startMonth);
+    while (currentMonth <= endMonth) {
+      const monthKey = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}`;
+      const commission = monthlyCommissions[monthKey] || 0;
+      const taxDue = commission * 0.1;
+      
+      const taxPaidRecord = paidTaxes.find((t: any) => t.month === monthKey);
+      
+      monthlyTaxes.push({
+        month: monthKey,
+        commission,
+        taxDue,
+        status: taxPaidRecord ? 'PAID' : 'UNPAID',
+        paidAt: taxPaidRecord ? taxPaidRecord.createdAt : null,
+      });
+
+      currentMonth.setMonth(currentMonth.getMonth() + 1);
+    }
+
+    monthlyTaxes.sort((a, b) => b.month.localeCompare(a.month));
+
+    return {
+      transactions,
+      partners,
+      system: {
+        bankAccountNumber: '110011011102',
+        bankName: 'Vietcombank',
+        initialBalance,
+        platformFeeRevenue,
+        balance: systemBalance,
+        depositsAndWithdrawals: systemDepositsAndWithdrawals,
+        paidTaxes,
+        monthlyTaxes,
+      },
+    };
+  }
+
+  async addSystemTransaction(user: AuthenticatedUser, body: Record<string, unknown>) {
+    const isSuperAdmin = this.isSuperAdminEmail(user.email);
+    if (!isSuperAdmin) {
+      throw new ForbiddenException('Chi co admin tong moi duoc phep thao tac nap/rut tai khoan he thong');
+    }
+
+    const db = this.readPayDb();
+    if (!db.system) {
+      db.system = { initialBalance: 1125230, depositsAndWithdrawals: [], paidTaxes: [] };
+    }
+
+    const newTx = {
+      id: `SYS-TX-${Math.floor(100000 + Math.random() * 900000)}`,
+      type: body.type,
+      amount: Number(body.amount),
+      targetBank: body.targetBank || 'Vietcombank',
+      targetAccount: body.targetAccount || '110011011102',
+      targetHolder: body.targetHolder || 'Company Account',
+      status: 'SUCCESS',
+      createdAt: new Date().toISOString(),
+    };
+
+    db.system.depositsAndWithdrawals.push(newTx);
+    this.writePayDb(db);
+    return { success: true, transaction: newTx };
+  }
+
+  async paySystemTax(user: AuthenticatedUser, body: Record<string, unknown>) {
+    const isSuperAdmin = this.isSuperAdminEmail(user.email);
+    if (!isSuperAdmin) {
+      throw new ForbiddenException('Chi co admin tong moi duoc phep dong thue');
+    }
+
+    const db = this.readPayDb();
+    if (!db.system) {
+      db.system = { initialBalance: 1125230, depositsAndWithdrawals: [], paidTaxes: [] };
+    }
+
+    const month = body.month as string;
+    const amount = Number(body.amount);
+
+    const existing = db.system.paidTaxes.find((t: any) => t.month === month);
+    if (existing) {
+      throw new BadRequestException(`Thue thang ${month} da duoc dong truoc do`);
+    }
+
+    const newTaxPayment = {
+      month,
+      amount,
+      createdAt: new Date().toISOString(),
+    };
+
+    db.system.paidTaxes.push(newTaxPayment);
+    this.writePayDb(db);
+    return { success: true, taxPayment: newTaxPayment };
+  }
+
+  async addPartnerTransaction(user: AuthenticatedUser, body: Record<string, unknown>) {
+    const db = this.readPayDb();
+    const partnerIdStr = body.partnerId as string;
+    
+    if (!db.partners[partnerIdStr]) {
+      throw new NotFoundException('Doi tac chua dang ky NowayhomePay');
+    }
+
+    if (!db.partners[partnerIdStr].partnerDepositsAndWithdrawals) {
+      db.partners[partnerIdStr].partnerDepositsAndWithdrawals = [];
+    }
+
+    const newTx = {
+      id: `PART-TX-${Math.floor(100000 + Math.random() * 900000)}`,
+      type: body.type,
+      amount: Number(body.amount),
+      status: 'SUCCESS',
+      createdAt: new Date().toISOString(),
+    };
+
+    db.partners[partnerIdStr].partnerDepositsAndWithdrawals.push(newTx);
+    this.writePayDb(db);
+    return { success: true, transaction: newTx };
+  }
+
+  async addPartnerSelfTransaction(user: AuthenticatedUser, body: Record<string, unknown>) {
+    const partner = await this.partnerProfile(user);
+    const db = this.readPayDb();
+    const partnerIdStr = partner.id.toString();
+    
+    if (!db.partners[partnerIdStr]) {
+      throw new NotFoundException('Doi tac chua dang ky NowayhomePay');
+    }
+
+    if (!db.partners[partnerIdStr].partnerDepositsAndWithdrawals) {
+      db.partners[partnerIdStr].partnerDepositsAndWithdrawals = [];
+    }
+
+    const newTx = {
+      id: `PART-TX-${Math.floor(100000 + Math.random() * 900000)}`,
+      type: body.type,
+      amount: Number(body.amount),
+      status: 'SUCCESS',
+      createdAt: new Date().toISOString(),
+    };
+
+    db.partners[partnerIdStr].partnerDepositsAndWithdrawals.push(newTx);
+    this.writePayDb(db);
+    return { success: true, transaction: newTx };
   }
 }

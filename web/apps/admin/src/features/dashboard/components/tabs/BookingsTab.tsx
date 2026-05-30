@@ -73,7 +73,8 @@ function toDateOnly(date: Date) {
 
 function belongsToUpcomingTab(booking: BookingItem) {
   return (
-    (booking.isFutureStay || booking.isCurrentStay || booking.status === "pending") &&
+    (booking.isFutureStay || booking.status === "pending") &&
+    !booking.isCurrentStay &&
     !booking.isCompleted &&
     booking.status !== "cancelled"
   );
@@ -261,10 +262,19 @@ export function BookingsTab() {
       const sum = (rows: BookingItem[], key: "total" | "partnerPayout" | "platformFee") => rows.reduce((total, item) => total + Number(item[key] || 0), 0);
       
       const completed = activeBookings.filter(b => b.isCompleted);
+      const pendingActive = activeBookings.filter(b => !b.isCompleted);
       const earnedRevenue = sum(completed, "total");
       const grossRevenue = sum(activeBookings, "total");
+      const pendingRevenue = grossRevenue - earnedRevenue;
       const earnedCommission = sum(completed, "platformFee");
+      // Ước tính hoa hồng pending dựa trên tỷ lệ từ đơn đã hoàn thành
+      const commissionRate = earnedRevenue > 0 ? earnedCommission / earnedRevenue : 0;
       const grossCommission = sum(activeBookings, "platformFee");
+      // Nếu platformFee chưa được ghi nhận (=0) cho đơn pending → ước tính
+      const pendingCommissionRaw = grossCommission - earnedCommission;
+      const pendingCommission = pendingCommissionRaw > 0
+        ? pendingCommissionRaw
+        : Math.round(pendingRevenue * commissionRate);
       const earnedPartnerPayout = sum(completed, "partnerPayout");
       const grossPartnerPayout = sum(activeBookings, "partnerPayout");
 
@@ -272,13 +282,14 @@ export function BookingsTab() {
         ...hotel,
         bookings,
         currentStayCount: activeBookings.filter((booking) => booking.isCurrentStay).length,
+        upcomingStayCount: pendingActive.filter(b => b.isFutureStay && !b.isCurrentStay).length,
         totalBookings: activeBookings.length,
         completedBookingsCount: completed.length,
         pendingBookingsCount: activeBookings.length - completed.length,
         earnedRevenue,
-        pendingRevenue: grossRevenue - earnedRevenue,
+        pendingRevenue,
         earnedCommission,
-        pendingCommission: grossCommission - earnedCommission,
+        pendingCommission,
         earnedPartnerPayout,
         pendingPartnerPayout: grossPartnerPayout - earnedPartnerPayout,
       };
@@ -317,6 +328,7 @@ export function BookingsTab() {
 
   const totals = useMemo(() => ({
     currentStay: filtered.reduce((sum, hotel) => sum + hotel.currentStayCount, 0),
+    upcomingStay: filtered.reduce((sum, hotel) => sum + (hotel.upcomingStayCount || 0), 0),
     completedBookings: filtered.reduce((sum, hotel) => sum + hotel.completedBookingsCount, 0),
     pendingBookings: filtered.reduce((sum, hotel) => sum + hotel.pendingBookingsCount, 0),
     earnedRevenue: filtered.reduce((sum, hotel) => sum + hotel.earnedRevenue, 0),
@@ -333,7 +345,7 @@ export function BookingsTab() {
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-        <Stat label="Đang lưu trú" value={String(totals.currentStay)} tone="blue" highlight={shouldHighlight && !targetId} />
+        <Stat label="Đang lưu trú" value={splitCount(totals.currentStay, totals.upcomingStay)} tone="blue" highlight={shouldHighlight && !targetId} />
         <Stat label="Số đơn" value={splitCount(totals.completedBookings, totals.pendingBookings)} tone="indigo" highlight={shouldHighlight && !targetId} />
         <Stat label="Doanh thu" value={splitMoney(totals.earnedRevenue, totals.pendingRevenue)} tone="emerald" highlight={shouldHighlight && !targetId} />
         <Stat label="Hoa hồng" value={splitMoney(totals.earnedCommission, totals.pendingCommission)} tone="amber" highlight={shouldHighlight && !targetId} />
@@ -495,11 +507,12 @@ function Stat({ label, value, tone, highlight }: { label: string; value: React.R
 
 function BookingDetailModal({ hotel, onClose, onRefresh, onNavigateToRoom }: { hotel: HotelReport; onClose: () => void; onRefresh: () => void; onNavigateToRoom?: (hotelId: number) => void }) {
   const [selectedSingle, setSelectedSingle] = useState<BookingItem | null>(null);
-  const [activeTab, setActiveTab] = useState<"upcoming" | "completed" | "cancelled">("upcoming");
+  const [activeTab, setActiveTab] = useState<"upcoming" | "current" | "completed" | "cancelled">("upcoming");
 
   const filteredBookings = useMemo(() => {
     if (activeTab === "cancelled") return hotel.bookings.filter(b => b.status === "cancelled");
     if (activeTab === "completed") return hotel.bookings.filter(b => b.isCompleted && b.status !== "cancelled");
+    if (activeTab === "current") return hotel.bookings.filter(b => b.isCurrentStay || b.status === "checked_in");
     return hotel.bookings.filter(belongsToUpcomingTab);
   }, [hotel.bookings, activeTab]);
 
@@ -527,13 +540,13 @@ function BookingDetailModal({ hotel, onClose, onRefresh, onNavigateToRoom }: { h
               </button>
             )}
             <div className="flex border rounded-md overflow-hidden bg-background">
-              {(["upcoming", "completed", "cancelled"] as const).map(tab => (
+              {(["upcoming", "current", "completed", "cancelled"] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={`px-4 py-1.5 text-xs font-bold transition-all ${activeTab === tab ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
                 >
-                  {tab === "upcoming" ? "Chưa đến" : tab === "completed" ? "Đã xong" : "Đã hủy"}
+                  {tab === "upcoming" ? "Chưa đến" : tab === "current" ? "Đang ở" : tab === "completed" ? "Đã xong" : "Đã hủy"}
                 </button>
               ))}
             </div>

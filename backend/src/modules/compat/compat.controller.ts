@@ -402,6 +402,69 @@ export class CompatController {
     return this.compatService.placesNearby(query);
   }
 
+  @Roles(Role.PARTNER)
+  @Get('partner/nowayhomepay/status')
+  getNowayhomePayStatus(@CurrentUser() user: AuthenticatedUser) {
+    return this.compatService.getNowayhomePayStatus(user);
+  }
+
+  @Roles(Role.PARTNER)
+  @Post('partner/nowayhomepay/register')
+  registerNowayhomePay(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.compatService.registerNowayhomePay(user, body);
+  }
+
+  @Roles(Role.PARTNER)
+  @Post('partner/nowayhomepay/transaction')
+  addPartnerSelfTransaction(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.compatService.addPartnerSelfTransaction(user, body);
+  }
+
+  @Roles(Role.ADMIN)
+  @Get('admin/transactions')
+  getAdminTransactions() {
+    return this.compatService.getAdminTransactions();
+  }
+
+  @Roles(Role.ADMIN)
+  @Get('admin/transactions/dashboard')
+  getAdminTransactionsDashboard(@CurrentUser() user: AuthenticatedUser) {
+    return this.compatService.getAdminTransactionsDashboard(user);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post('admin/system/transaction')
+  addSystemTransaction(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.compatService.addSystemTransaction(user, body);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post('admin/system/pay-tax')
+  paySystemTax(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.compatService.paySystemTax(user, body);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post('admin/partner/transaction')
+  addPartnerTransaction(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.compatService.addPartnerTransaction(user, body);
+  }
+
   private setSessionCookies(
     response: Response,
     token: string,

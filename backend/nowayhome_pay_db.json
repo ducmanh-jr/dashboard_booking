@@ -1,0 +1,20 @@
+{
+  "partners": {
+    "4": {
+      "registered": true,
+      "bankName": "Vietcombank",
+      "bankAccountNumber": "1290309123",
+      "bankAccountHolder": "DONALD TRUMP",
+      "virtualCustomerAccountNumber": "NWH-PAY-722259",
+      "partnerDepositsAndWithdrawals": [
+        {
+          "id": "PART-TX-339065",
+          "type": "DEPOSIT",
+          "amount": 20000,
+          "status": "SUCCESS",
+          "createdAt": "2026-05-30T05:13:09.063Z"
+        }
+      ]
+    }
+  }
+}

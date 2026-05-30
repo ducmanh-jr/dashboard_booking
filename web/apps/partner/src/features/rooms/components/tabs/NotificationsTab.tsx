@@ -61,14 +61,15 @@ export function NotificationsTab() {
     try {
       await markAsRead(id);
       updateList((items) => items.map((item) => item.id === id ? { ...item, isRead: true } : item));
+      window.dispatchEvent(new CustomEvent("notifications-action", { detail: { type: 'read', id } }));
     } catch {}
   }
 
   async function remove(id: number) {
-    if (!confirm("Xóa thông báo này?")) return;
     try {
       await deleteNotification(id);
       updateList((items) => items.filter((item) => item.id !== id));
+      window.dispatchEvent(new CustomEvent("notifications-action", { detail: { type: 'remove', id } }));
     } catch {}
   }
 
@@ -76,6 +77,7 @@ export function NotificationsTab() {
     try {
       await markReadAllApi();
       updateList((items) => items.map((item) => ({ ...item, isRead: true })));
+      window.dispatchEvent(new CustomEvent("notifications-action", { detail: { type: 'read-all' } }));
     } catch {}
   }
 

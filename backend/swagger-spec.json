@@ -1893,6 +1893,118 @@
         ]
       }
     },
+    "/api/partner/nowayhomepay/status": {
+      "get": {
+        "operationId": "CompatController_getNowayhomePayStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compat"
+        ]
+      }
+    },
+    "/api/partner/nowayhomepay/register": {
+      "post": {
+        "operationId": "CompatController_registerNowayhomePay",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compat"
+        ]
+      }
+    },
+    "/api/partner/nowayhomepay/transaction": {
+      "post": {
+        "operationId": "CompatController_addPartnerSelfTransaction",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compat"
+        ]
+      }
+    },
+    "/api/admin/transactions": {
+      "get": {
+        "operationId": "CompatController_getAdminTransactions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compat"
+        ]
+      }
+    },
+    "/api/admin/transactions/dashboard": {
+      "get": {
+        "operationId": "CompatController_getAdminTransactionsDashboard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compat"
+        ]
+      }
+    },
+    "/api/admin/system/transaction": {
+      "post": {
+        "operationId": "CompatController_addSystemTransaction",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compat"
+        ]
+      }
+    },
+    "/api/admin/system/pay-tax": {
+      "post": {
+        "operationId": "CompatController_paySystemTax",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compat"
+        ]
+      }
+    },
+    "/api/admin/partner/transaction": {
+      "post": {
+        "operationId": "CompatController_addPartnerTransaction",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compat"
+        ]
+      }
+    },
     "/api/payments/checkout/{bookingId}": {
       "post": {
         "operationId": "PaymentsController_checkout",

@@ -273,8 +273,8 @@ Run-Step "Generate Prisma client" {
 
   Run-Step "Mo 3 tien trinh backend/admin/partner" {
     Start-ServiceWindow "nwh-backend" "pnpm --filter backend start:prod"
-    Start-ServiceWindow "nwh-admin" "pnpm --filter webadmin dev --host 127.0.0.1"
-    Start-ServiceWindow "nwh-partner" "pnpm --filter webpartner dev --host 127.0.0.1"
+    Start-ServiceWindow "nwh-admin" "pnpm --filter webadmin dev --host localhost --port 5173 --strictPort"
+    Start-ServiceWindow "nwh-partner" "pnpm --filter webpartner dev --host localhost --port 5174 --strictPort"
   }
 
   Run-Step "Doi backend san sang" {
