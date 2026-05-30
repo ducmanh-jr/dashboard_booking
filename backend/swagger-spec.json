@@ -2081,6 +2081,258 @@
           "Payments"
         ]
       }
+    },
+    "/api/admin/promotions": {
+      "get": {
+        "operationId": "PromotionsController_findAll",
+        "parameters": [
+          {
+            "name": "filter",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "all",
+                "active",
+                "inactive",
+                "upcoming",
+                "expired"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Danh sách promotion"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách tất cả khuyến mãi",
+        "tags": [
+          "Promotions"
+        ]
+      },
+      "post": {
+        "operationId": "PromotionsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePromotionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Promotion đã được tạo"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo promotion mới",
+        "tags": [
+          "Promotions"
+        ]
+      }
+    },
+    "/api/admin/promotions/{id}": {
+      "get": {
+        "operationId": "PromotionsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xem chi tiết một promotion",
+        "tags": [
+          "Promotions"
+        ]
+      },
+      "patch": {
+        "operationId": "PromotionsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePromotionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật promotion",
+        "tags": [
+          "Promotions"
+        ]
+      },
+      "delete": {
+        "operationId": "PromotionsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xóa mềm promotion",
+        "tags": [
+          "Promotions"
+        ]
+      }
+    },
+    "/api/admin/promotions/{id}/toggle": {
+      "patch": {
+        "operationId": "PromotionsController_toggle",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Bật / tắt trạng thái promotion",
+        "tags": [
+          "Promotions"
+        ]
+      }
+    },
+    "/api/admin/promotions/{id}/vouchers": {
+      "get": {
+        "operationId": "PromotionsController_findVouchers",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách mã voucher của promotion",
+        "tags": [
+          "Promotions"
+        ]
+      },
+      "post": {
+        "operationId": "PromotionsController_createVoucher",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVoucherDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo mã voucher mới cho promotion",
+        "tags": [
+          "Promotions"
+        ]
+      }
     }
   },
   "info": {
@@ -2687,6 +2939,143 @@
         "required": [
           "bookingCode",
           "transactionStatus"
+        ]
+      },
+      "CreatePromotionDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Flash Sale Hè 2026"
+          },
+          "promoType": {
+            "type": "string",
+            "enum": [
+              "early_bird",
+              "last_minute",
+              "long_stay",
+              "flash_sale",
+              "loyalty",
+              "custom"
+            ]
+          },
+          "discountType": {
+            "type": "string",
+            "enum": [
+              "percent",
+              "fixed"
+            ]
+          },
+          "discountValue": {
+            "type": "number",
+            "example": 20,
+            "description": "Giá trị giảm (% hoặc VNĐ cố định)"
+          },
+          "maxDiscount": {
+            "type": "number",
+            "example": 500000,
+            "description": "Giảm tối đa (chỉ áp dụng khi discountType = percent)"
+          },
+          "minOrderAmount": {
+            "type": "number",
+            "example": 500000,
+            "description": "Giá trị đơn tối thiểu để áp dụng"
+          },
+          "startDate": {
+            "type": "string",
+            "example": "2026-06-01",
+            "description": "Ngày bắt đầu YYYY-MM-DD"
+          },
+          "endDate": {
+            "type": "string",
+            "example": "2026-08-31",
+            "description": "Ngày kết thúc YYYY-MM-DD"
+          },
+          "maxUses": {
+            "type": "number",
+            "example": 100,
+            "description": "Tổng lượt dùng tối đa (null = không giới hạn)"
+          },
+          "partnerId": {
+            "type": "number",
+            "example": 5,
+            "description": "ID đối tác (null = áp dụng toàn platform)"
+          }
+        },
+        "required": [
+          "name",
+          "promoType",
+          "discountType",
+          "discountValue",
+          "startDate",
+          "endDate"
+        ]
+      },
+      "UpdatePromotionDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "promoType": {
+            "type": "string",
+            "enum": [
+              "early_bird",
+              "last_minute",
+              "long_stay",
+              "flash_sale",
+              "loyalty",
+              "custom"
+            ]
+          },
+          "discountType": {
+            "type": "string",
+            "enum": [
+              "percent",
+              "fixed"
+            ]
+          },
+          "discountValue": {
+            "type": "number"
+          },
+          "maxDiscount": {
+            "type": "number"
+          },
+          "minOrderAmount": {
+            "type": "number"
+          },
+          "startDate": {
+            "type": "string",
+            "example": "2026-06-01"
+          },
+          "endDate": {
+            "type": "string",
+            "example": "2026-08-31"
+          },
+          "maxUses": {
+            "type": "number"
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CreateVoucherDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "SUMMER2026",
+            "description": "Mã voucher (duy nhất, viết hoa, không dấu)"
+          },
+          "maxUsesPerUser": {
+            "type": "number",
+            "example": 1,
+            "description": "Số lần tối đa mỗi user dùng được (mặc định 1)"
+          }
+        },
+        "required": [
+          "code"
         ]
       }
     }

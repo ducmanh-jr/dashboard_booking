@@ -11,7 +11,8 @@ import {
   Menu,
   UserCog,
   X,
-  CreditCard
+  CreditCard,
+  Tag
 } from "lucide-react";
 import { useState } from "react";
 import { User } from "../types";
@@ -29,6 +30,7 @@ export function AdminLayout({ user, onLogout, notificationCount }: { user: User;
     { path: "/rooms", label: "Khách sạn", icon: Hotel },
     { path: "/admins", label: "Quản trị viên", icon: ShieldCheck },
     { path: "/transactions", label: "Giao dịch", icon: CreditCard },
+    { path: "/promotions", label: "Khuyến mãi", icon: Tag },
     { path: "/notifications", label: "Thông báo", icon: Bell, count: notificationCount },
     { path: "/account", label: "Tài khoản", icon: UserCog },
   ];

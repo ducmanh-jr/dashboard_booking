@@ -19,6 +19,7 @@ const AdminsTab = lazy(() => import("../features/dashboard/components/tabs/Admin
 const NotificationsTab = lazy(() => import("../features/dashboard/components/tabs/NotificationsTab").then(m => ({ default: m.NotificationsTab })));
 const AccountSettingsPage = lazy(() => import("../features/account/components/AccountSettingsPage").then(m => ({ default: m.AccountSettingsPage })));
 const TransactionsTab = lazy(() => import("../features/dashboard/components/tabs/TransactionsTab").then(m => ({ default: m.TransactionsTab })));
+const PromotionsTab = lazy(() => import("../features/dashboard/components/tabs/PromotionsTab").then(m => ({ default: m.PromotionsTab })));
 
 interface RoutesProps {
   user: User | null;
@@ -47,6 +48,7 @@ export default function AppRoutes({ user, unreadCount, setUser, logout, loadUnre
           <Route path="admins" element={<AdminsTab currentUserId={user?.id || 0} isSuperAdmin={Boolean(user?.isSuperAdmin)} />} />
           <Route path="notifications" element={<NotificationsTab onNavigate={(tab, filter, targetId) => navigate(`/${tab}`, { state: { filter, targetId, highlight: true } })} onRefreshCount={loadUnread} />} />
           <Route path="transactions" element={<TransactionsTab user={user} />} />
+          <Route path="promotions" element={<PromotionsTab />} />
           <Route path="account" element={<AccountSettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" />} />

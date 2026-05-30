@@ -20,6 +20,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { PropertiesModule } from './modules/properties/properties.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { UsersModule } from './modules/users/users.module';
+import { PromotionsModule } from './modules/promotions/promotions.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -66,6 +67,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ReviewsModule,
     CompatModule,
     PaymentsModule,
+    PromotionsModule,
   ],
   providers: [
     {
