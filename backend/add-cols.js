@@ -1,1 +1,0 @@
-const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); async function main() { await prisma.$executeRawUnsafe('ALTER TABLE properties ADD COLUMN IF NOT EXISTS highlights JSONB, ADD COLUMN IF NOT EXISTS transport_connections JSONB, ADD COLUMN IF NOT EXISTS nearby_places JSONB;'); console.log('Done'); } main().finally(() => prisma.$disconnect());
