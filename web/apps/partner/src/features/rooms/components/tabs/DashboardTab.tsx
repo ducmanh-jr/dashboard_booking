@@ -109,7 +109,7 @@ export function DashboardTab() {
     return reports
       .map((hotel) => {
         const bookings = hotel.bookings || [];
-        const activeBookings = bookings.filter((b) => !["cancelled", "pending"].includes(b.status));
+        const activeBookings = bookings.filter((b) => b.status !== "cancelled");
         const completedBookings = activeBookings.filter((b) => b.isCompleted);
         
         const sum = (rows: any[], key: string) => rows.reduce((acc, item) => acc + Number(item[key] || 0), 0);
@@ -167,7 +167,7 @@ export function DashboardTab() {
       const diffDays = diffTime / (1000 * 60 * 60 * 24);
       if (period === "week") return diffDays <= 7;
       if (period === "month") return diffDays <= 30;
-      return diffDays <= 365; // year
+      return true; // year = toàn bộ lịch sử
     });
   }, [allBookings, period, anchorDate]);
 
@@ -178,7 +178,7 @@ export function DashboardTab() {
     const pendingRooms = rooms.filter((r) => r.status !== "approved").length;
     const pendingRequestsCount = rooms.filter((r) => r.pendingRequest).length;
 
-    const activeBookings = filteredBookingsForStats.filter((b) => !["cancelled", "pending"].includes(b.status));
+    const activeBookings = filteredBookingsForStats.filter((b) => b.status !== "cancelled");
     const completedBookings = activeBookings.filter((b) => b.isCompleted);
 
     const totalBookings = activeBookings.length;

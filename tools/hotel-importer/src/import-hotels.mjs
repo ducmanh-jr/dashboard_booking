@@ -209,12 +209,27 @@ function timeoutSignal(ms) {
   return controller.signal;
 }
 
+// Xử lý song song với giới hạn concurrency để tránh bị rate-limit
+async function parallelMap(items, fn, concurrency = 5) {
+  const results = new Array(items.length);
+  let index = 0;
+  async function worker() {
+    while (index < items.length) {
+      const current = index++;
+      results[current] = await fn(items[current], current);
+    }
+  }
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, worker);
+  await Promise.all(workers);
+  return results;
+}
+
 async function fetchAgodaMetadata(url) {
   if (!url || !shouldFetchAgoda) return { data: {}, sources: {}, warning: null };
 
   try {
     const response = await fetch(url, {
-      signal: timeoutSignal(12000),
+      signal: timeoutSignal(6000),
       headers: {
         "accept-language": "vi,en;q=0.8",
         "user-agent":
@@ -281,7 +296,7 @@ async function fetchAgodaSecondaryData(pageUrl, html) {
     apiUrl.searchParams.set("all", "false");
     apiUrl.searchParams.set("isHostPropertiesEnabled", "false");
     const response = await fetch(apiUrl, {
-      signal: timeoutSignal(9000),
+      signal: timeoutSignal(5000),
       headers: {
         "accept-language": "vi,en;q=0.8",
         "referer": pageUrl,
@@ -754,7 +769,7 @@ async function fetchSearchFallback(record) {
 
   try {
     const response = await fetch(url, {
-      signal: timeoutSignal(8000),
+      signal: timeoutSignal(5000),
       headers: { "user-agent": "Mozilla/5.0 (compatible; nowayhome-dashboard-hotel-importer/0.1)" },
     });
     if (!response.ok) return {};
@@ -831,7 +846,7 @@ async function fetchHotelImageFallback(record) {
       const searchUrl = new URL("https://html.duckduckgo.com/html/");
       searchUrl.searchParams.set("q", query);
       const response = await fetch(searchUrl, {
-        signal: timeoutSignal(8000),
+        signal: timeoutSignal(5000),
         headers: {
           "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
         },
@@ -938,7 +953,7 @@ function extractSearchResultLinks(html) {
 async function fetchImagesFromPage(pageUrl, hotelName) {
   try {
     const response = await fetch(pageUrl, {
-      signal: timeoutSignal(8000),
+      signal: timeoutSignal(5000),
       headers: {
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
         "accept-language": "en,vi;q=0.8",
@@ -1729,9 +1744,10 @@ async function main() {
   const csv = await fs.readFile(absoluteInput, "utf8");
   const rows = parseCsv(csv);
   const seenSlugs = new Set();
-  const normalized = [];
 
-  for (const row of rows) {
+  // Xử lý song song 5 khách sạn cùng lúc để tăng tốc độ đáng kể
+  const CONCURRENCY = 5;
+  const processedItems = await parallelMap(rows, async (row) => {
     const agoda = await fetchAgodaMetadata(row.agoda_url);
     const merged = mergeRecord(row, agoda.data, inferManualSources(row), agoda.sources);
     const enriched = await enrichRealData(merged);
@@ -1742,6 +1758,12 @@ async function main() {
       ...enriched.notes,
       ...(filled.filledFields.length ? [`Filled missing fields: ${filled.filledFields.join(", ")}`] : []),
     ];
+    return { agoda, enriched, filled };
+  }, CONCURRENCY);
+
+  // normalizeRecord dùng seenSlugs nên phải chạy tuần tự sau khi fetch xong
+  const normalized = [];
+  for (const { agoda, enriched, filled } of processedItems) {
     const record = normalizeRecord(filled.record, seenSlugs);
     if (!shouldFillMissing) {
       if (agoda.warning) record.warnings.push(agoda.warning);

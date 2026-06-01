@@ -2491,7 +2491,7 @@ export class CompatService {
               type: 'CUSTOMER_PAY',
               method: 'ONLINE',
               status: 'SUCCESS',
-              createdAt: booking.createdAt,
+              createdAt: booking.checkOutDate,
             });
             transactions.push({
               id: `TX-SYS-${booking.id}`,
@@ -2502,7 +2502,7 @@ export class CompatService {
               type: 'SYSTEM_PAY_TO_PARTNER',
               method: 'ONLINE',
               status: 'SUCCESS',
-              createdAt: booking.createdAt,
+              createdAt: booking.checkOutDate,
             });
             walletBalance += partnerPayoutAmount;
           } else {
@@ -2515,7 +2515,7 @@ export class CompatService {
               type: 'COMMISSION_DEDUCTION',
               method: 'CASH',
               status: 'SUCCESS',
-              createdAt: booking.createdAt,
+              createdAt: booking.checkOutDate,
             });
             walletBalance -= platformFeeAmount;
           }
@@ -2610,7 +2610,7 @@ export class CompatService {
               type: 'CUSTOMER_PAY',
               method: 'ONLINE',
               status: 'SUCCESS',
-              createdAt: booking.createdAt,
+              createdAt: booking.checkOutDate,
             });
             transactions.push({
               id: `TX-SYS-${booking.id}`,
@@ -2621,7 +2621,7 @@ export class CompatService {
               type: 'SYSTEM_PAY_TO_PARTNER',
               method: 'ONLINE',
               status: 'SUCCESS',
-              createdAt: booking.createdAt,
+              createdAt: booking.checkOutDate,
             });
           } else {
             transactions.push({
@@ -2633,7 +2633,7 @@ export class CompatService {
               type: 'COMMISSION_DEDUCTION',
               method: 'CASH',
               status: 'SUCCESS',
-              createdAt: booking.createdAt,
+              createdAt: booking.checkOutDate,
             });
           }
         }
@@ -2774,7 +2774,7 @@ export class CompatService {
               type: 'CUSTOMER_PAY',
               method: 'ONLINE',
               status: 'SUCCESS',
-              createdAt: booking.createdAt,
+              createdAt: booking.checkOutDate,
             });
             transactions.push({
               id: `TX-SYS-${booking.id}`,
@@ -2793,7 +2793,7 @@ export class CompatService {
               type: 'SYSTEM_PAY_TO_PARTNER',
               method: 'ONLINE',
               status: 'SUCCESS',
-              createdAt: booking.createdAt,
+              createdAt: booking.checkOutDate,
             });
           } else {
             transactions.push({
@@ -2813,7 +2813,7 @@ export class CompatService {
               type: 'COMMISSION_DEDUCTION',
               method: 'CASH',
               status: 'SUCCESS',
-              createdAt: booking.createdAt,
+              createdAt: booking.checkOutDate,
             });
           }
         }
@@ -2880,7 +2880,7 @@ export class CompatService {
 
         if (isCompleted) {
           const platformFeeAmount = this.bookingPlatformFee(booking);
-          const monthKey = booking.createdAt.toISOString().slice(0, 7);
+          const monthKey = booking.checkOutDate.toISOString().slice(0, 7);
           monthlyCommissions[monthKey] = (monthlyCommissions[monthKey] || 0) + platformFeeAmount;
         }
       }
