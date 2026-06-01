@@ -151,6 +151,7 @@ model Booking {
   roomType            RoomType            @relation(fields: [roomTypeId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_booking_rt")
   ratePlan            RatePlan            @relation(fields: [ratePlanId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_booking_rp")
   voucher             Voucher?            @relation(fields: [voucherId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_booking_voucher")
+
   @@index([customerId], map: "idx_booking_customer")
   @@index([customerId, status], map: "idx_booking_customer_status")
   @@index([propertyId], map: "idx_booking_property")
