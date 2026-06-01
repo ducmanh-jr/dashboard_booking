@@ -6,6 +6,7 @@ import {
 } from "../../../../api/promotionsApi";
 import { Card, CardHeader, CardTitle, CardContent, Button, cn } from "../../../../shared/components/ui";
 import { Tag, Plus, ToggleLeft, ToggleRight, Trash2, Ticket, X, ChevronDown } from "lucide-react";
+import { useConfirmDialog } from "../../../../shared/components/ConfirmDialog";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function PromotionsTab() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const load = async (filter: PromoFilter = state.filter) => {
     dispatch({ type: "SET_LOADING", payload: true });
@@ -106,7 +108,13 @@ export function PromotionsTab() {
   };
 
   const handleDelete = async (p: Promotion) => {
-    if (!confirm(`Xóa chương trình "${p.name}"?`)) return;
+    const ok = await confirm({
+      title: "Xóa chương trình khuyến mãi",
+      message: `Chương trình "${p.name}" sẽ bị xóa và không thể áp dụng cho đơn mới.`,
+      confirmText: "Xóa",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await deletePromotion(p.id);
       load();
@@ -296,6 +304,7 @@ export function PromotionsTab() {
           onClose={() => dispatch({ type: "CLOSE_MODAL" })}
         />
       )}
+      {confirmDialog}
     </div>
   );
 }

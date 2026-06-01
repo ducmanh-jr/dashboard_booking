@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Bell, CheckCircle2, KeyRound, ShieldCheck, UserRound, UsersRound } from "lucide-react";
 import { fetchAccountOverview, updateAccountProfile, uploadAvatarFile, type AccountOverview } from "../../../api/accountApi";
+import type { User } from "../../../shared/types";
 
 type SectionKey = "profile" | "security" | "permissions" | "notifications";
 
@@ -12,7 +13,7 @@ const sections: Array<{ key: SectionKey; label: string; icon: typeof UserRound }
   { key: "notifications", label: "Thông báo", icon: Bell },
 ];
 
-export function AccountSettingsPage() {
+export function AccountSettingsPage({ onUserUpdated }: { onUserUpdated?: (patch: Partial<User>) => void }) {
   const [active, setActive] = useState<SectionKey>("profile");
   const [data, setData] = useState<AccountOverview | null>(null);
   const [form, setForm] = useState({ fullName: "", phone: "", preferredLanguage: "vi", avatarUrl: "" });
@@ -53,6 +54,10 @@ export function AccountSettingsPage() {
         preferredLanguage: refreshed.profile.preferredLanguage || "vi",
         avatarUrl: refreshed.profile.avatarUrl || "",
       });
+      onUserUpdated?.({
+        fullName: refreshed.profile.fullName,
+        avatarUrl: refreshed.profile.avatarUrl || null,
+      });
       setMessage("Đã cập nhật thông tin tài khoản.");
     } catch (error: any) {
       setMessage(error.message || "Không thể cập nhật tài khoản.");
@@ -75,16 +80,12 @@ export function AccountSettingsPage() {
     setUploadingAvatar(true);
     setMessage("");
     try {
-      const avatarUrl = await uploadAvatarFile(file);
-      await updateAccountProfile({ ...form, avatarUrl });
+      await uploadAvatarFile(file);
       const refreshed = await fetchAccountOverview();
       setData(refreshed);
-      setForm({
-        fullName: refreshed.profile.fullName,
-        phone: refreshed.profile.phone || "",
-        preferredLanguage: refreshed.profile.preferredLanguage || "vi",
-        avatarUrl: refreshed.profile.avatarUrl || "",
-      });
+      setForm((current) => ({ ...current, avatarUrl: refreshed.profile.avatarUrl || "" }));
+      onUserUpdated?.({ avatarUrl: refreshed.profile.avatarUrl || null });
+      window.dispatchEvent(new CustomEvent("nowayhome:user-updated"));
       setMessage("Đã cập nhật ảnh đại diện.");
     } catch (error: any) {
       setMessage(error.message || "Không thể cập nhật ảnh đại diện.");

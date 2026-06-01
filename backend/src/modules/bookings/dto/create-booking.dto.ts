@@ -8,6 +8,8 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
   ValidationArguments,
+  IsOptional,
+  IsString,
 } from 'class-validator';
 
 @ValidatorConstraint({ name: 'checkInBeforeCheckOut', async: false })
@@ -72,4 +74,16 @@ export class CreateBookingDto {
   @IsInt()
   @Min(1)
   roomsNeeded = 1;
+
+  @ApiPropertyOptional({ example: 1, description: 'Voucher ID to apply discount' })
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  voucherId?: number;
+
+  @ApiPropertyOptional({ example: 'credit_card', description: 'Payment method selected' })
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
 }

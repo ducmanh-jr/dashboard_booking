@@ -1,3 +1,20 @@
 {
-  "partners": {}
+  "partners": {
+    "4": {
+      "registered": true,
+      "bankName": "Vietcombank",
+      "bankAccountNumber": "39845934875",
+      "bankAccountHolder": "NGUYEN DUC MANH",
+      "virtualCustomerAccountNumber": "NWH-PAY-136705",
+      "partnerDepositsAndWithdrawals": [
+        {
+          "id": "PART-TX-808923",
+          "type": "WITHDRAW",
+          "amount": 60000,
+          "status": "SUCCESS",
+          "createdAt": "2026-06-01T04:37:31.090Z"
+        }
+      ]
+    }
+  }
 }

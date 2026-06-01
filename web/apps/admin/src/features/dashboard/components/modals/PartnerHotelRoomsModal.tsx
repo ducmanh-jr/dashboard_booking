@@ -3,6 +3,9 @@ import { fetchPartnerRooms } from "../../../../api/partnersApi";
 import { deleteRoom } from "../../../../api/roomsApi";
 import { Room, RoomChangeRequest } from "../../../../shared/types";
 import { RoomEditModal } from "./RoomEditModal";
+import { useConfirmDialog } from "../../../../shared/components/ConfirmDialog";
+import { ADMIN_PORTAL_NAME } from "../../../../shared/config/pageTitles";
+import { usePageTitle } from "../../../../shared/hooks/usePageTitle";
 
 function fmtVnd(value: number) {
   return `${value.toLocaleString("vi-VN")} ₫`;
@@ -104,6 +107,12 @@ export function PartnerHotelRoomsModal({ partner, onClose }: { partner: any; onC
   const [detail, setDetail] = useState<any | null>(null);
   const [editing, setEditing] = useState<any | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const { confirm, confirmDialog } = useConfirmDialog();
+  usePageTitle({
+    title: detail ? "Khách sạn" : "Đối tác",
+    entity: detail?.name || partner.fullName || partner.email,
+    portal: ADMIN_PORTAL_NAME,
+  });
 
   async function load() {
     setLoading(true);
@@ -119,7 +128,13 @@ export function PartnerHotelRoomsModal({ partner, onClose }: { partner: any; onC
   }
 
   async function removeRoom(room: any) {
-    if (!confirm(`Xóa khách sạn "${room.name}"?`)) return;
+    const ok = await confirm({
+      title: "Xóa khách sạn",
+      message: `Khách sạn "${room.name}" sẽ bị xóa khỏi hồ sơ đối tác.`,
+      confirmText: "Xóa",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await deleteRoom(room.id);
       await load();
@@ -471,6 +486,7 @@ export function PartnerHotelRoomsModal({ partner, onClose }: { partner: any; onC
           onSaved={async () => { await load(); }}
         />
       )}
+      {confirmDialog}
     </>
   );
 }

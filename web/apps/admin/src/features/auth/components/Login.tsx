@@ -2,6 +2,8 @@ import { FormEvent, useState } from "react";
 import { login, googleLogin } from "../../../api/authApi";
 import { AuthLayout, GoogleButton } from "@nowayhome/auth-ui";
 import { User } from "../../../shared/types";
+import { ADMIN_PORTAL_NAME } from "../../../shared/config/pageTitles";
+import { usePageTitle } from "../../../shared/hooks/usePageTitle";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
 
@@ -9,6 +11,7 @@ const inputClass =
   "w-full h-[48px] pl-[44px] pr-[14px] rounded-xl border border-[#e2e8f0] bg-[#f8fafc]/50 text-sm text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#3b82f6] focus:bg-white focus:ring-4 focus:ring-[#3b82f6]/5 focus:shadow-[0_0_20px_rgba(59,130,246,0.1)] transition-all duration-300";
 
 export function Login({ onLogin }: { onLogin: (user: User) => void }) {
+  usePageTitle({ title: "Đăng nhập", portal: ADMIN_PORTAL_NAME, restoreOnUnmount: false });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");

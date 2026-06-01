@@ -23,6 +23,7 @@ $LockPath = Join-Path $env:TEMP "nwh_running.lock"
 
 $ChromeAdmin = Join-Path $env:TEMP "nwh_admin"
 $ChromePartner = Join-Path $env:TEMP "nwh_partner"
+$ChromeCustomer = Join-Path $env:TEMP "nwh_customer"
 
 function NowText {
   return (Get-Date -Format "HH:mm:ss")
@@ -110,7 +111,7 @@ function Stop-OldNwhProcesses {
       $_.ProcessId -ne $currentPid -and
       $_.CommandLine -and
       $_.CommandLine -match $escapedRoot -and
-      $_.CommandLine -match "pnpm|nest|vite|node --enable-source-maps|auto_export_loop"
+      $_.CommandLine -match "pnpm|nest|vite|node --enable-source-maps|auto_export_loop|expo"
     } |
     Select-Object -ExpandProperty ProcessId -Unique |
     ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
@@ -202,6 +203,7 @@ try {
   Write-Host ""
   Write-Host "Web Admin       http://localhost:5173" -ForegroundColor White
   Write-Host "Web Partner     http://localhost:5174/login" -ForegroundColor White
+  Write-Host "Web Customer    http://localhost:5175" -ForegroundColor White
   Write-Host ""
 
   Run-Step "Kiem tra cau truc folder" {
@@ -218,8 +220,8 @@ try {
     }
   }
 
-  Run-Step "Dung process cu tren port 3001, 5173, 5174" {
-    Stop-PortProcesses @(3001, 5173, 5174)
+  Run-Step "Dung process cu tren port 3001, 5173, 5174, 5175, 8081" {
+    Stop-PortProcesses @(3001, 5173, 5174, 5175, 8081)
     Stop-OldNwhProcesses
     Remove-Item -LiteralPath $LockPath -Force -ErrorAction SilentlyContinue
   }
@@ -271,19 +273,22 @@ Run-Step "Generate Prisma client" {
     Invoke-CommandChecked "pnpm" @("--filter", "backend", "run", "build")
   }
 
-  Run-Step "Mo 3 tien trinh backend/admin/partner" {
+  Run-Step "Mo cac tien trinh backend/admin/partner/customer/mobile" {
     Start-ServiceWindow "nwh-backend" "pnpm --filter backend start:prod"
     Start-ServiceWindow "nwh-admin" "pnpm --filter webadmin dev --host localhost --port 5173 --strictPort"
     Start-ServiceWindow "nwh-partner" "pnpm --filter webpartner dev --host localhost --port 5174 --strictPort"
+    Start-ServiceWindow "nwh-customer" "pnpm --filter fe-web-user dev --host localhost --port 5175 --strictPort"
+    Start-ServiceWindow "nwh-mobile" "cd mobile-app && npx expo start"
   }
 
   Run-Step "Doi backend san sang" {
     Wait-Http "http://127.0.0.1:3001/api/healthz" 90
   }
 
-  Run-Step "Doi web admin/partner san sang" {
-    Wait-Http "http://127.0.0.1:5173" 60
-    Wait-Http "http://127.0.0.1:5174/login" 60
+  Run-Step "Doi web admin/partner/customer san sang" {
+    Wait-Http "http://localhost:5173" 60
+    Wait-Http "http://localhost:5174/login" 60
+    Wait-Http "http://localhost:5175" 60
   }
 
   if ($NoBrowser) {
@@ -292,6 +297,7 @@ Run-Step "Generate Prisma client" {
     Run-Step "Mo trinh duyet" {
       Open-Chrome $ChromeAdmin "http://localhost:5173"
       Open-Chrome $ChromePartner "http://localhost:5174/login"
+      Open-Chrome $ChromeCustomer "http://localhost:5175"
     }
   }
 

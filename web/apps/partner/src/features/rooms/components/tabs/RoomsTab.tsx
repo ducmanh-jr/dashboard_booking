@@ -3,6 +3,9 @@ import { fetchRooms, requestDeleteRoom, requestRestoreRoom, fetchAvailability, u
 import { useLocation, useNavigate } from "react-router-dom";
 import { Room } from "../../../../shared/types";
 import { RoomDetailModal } from "../modals/RoomDetailModal";
+import { useConfirmDialog } from "../../../../shared/components/ConfirmDialog";
+import { PARTNER_PORTAL_NAME } from "../../../../shared/config/pageTitles";
+import { usePageTitle } from "../../../../shared/hooks/usePageTitle";
 
 type StatusFilter = "all" | "approved" | "pending" | "rejected" | "archived" | "request";
 
@@ -92,6 +95,7 @@ let cachedRooms: Room[] | null = null;
 
 export function RoomsTab() {
   const [viewingRoom, setViewingRoom] = useState<Room | null>(null);
+  usePageTitle({ title: "Khách sạn", entity: viewingRoom?.name, portal: PARTNER_PORTAL_NAME, restoreOnUnmount: false });
   const [rooms, setRooms] = useState<Room[]>(cachedRooms || []);
   const [loading, setLoading] = useState(!cachedRooms);
   const [filter, setFilter] = useState<StatusFilter>("all");
@@ -100,6 +104,7 @@ export function RoomsTab() {
   const location = useLocation();
   const [message, setMessage] = useState(location.state?.message || "");
   const navigate = useNavigate();
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -126,7 +131,13 @@ export function RoomsTab() {
   }, [location.pathname, location.state?.message, navigate]);
 
   async function requestDelete(room: Room) {
-    if (!confirm(`Gửi yêu cầu xóa khách sạn "${room.name}"?`)) return;
+    const ok = await confirm({
+      title: "Gửi yêu cầu xóa khách sạn",
+      message: `Yêu cầu xóa "${room.name}" sẽ được gửi cho Admin duyệt trước khi áp dụng.`,
+      confirmText: "Gửi yêu cầu",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await requestDeleteRoom(room.id);
       setMessage(`Đã gửi yêu cầu xóa khách sạn "${room.name}" chờ admin duyệt.`);
@@ -137,7 +148,12 @@ export function RoomsTab() {
   }
 
   async function requestRestore(room: Room) {
-    if (!confirm(`Gửi yêu cầu khôi phục khách sạn "${room.name}" cho admin duyệt?`)) return;
+    const ok = await confirm({
+      title: "Gửi yêu cầu khôi phục",
+      message: `Yêu cầu khôi phục "${room.name}" sẽ được gửi cho Admin duyệt.`,
+      confirmText: "Gửi yêu cầu",
+    });
+    if (!ok) return;
     try {
       await requestRestoreRoom(room.id);
       setMessage(`Đã gửi yêu cầu khôi phục khách sạn "${room.name}" chờ admin duyệt.`);
@@ -381,6 +397,7 @@ export function RoomsTab() {
           onClose={() => setViewingRoom(null)}
         />
       )}
+      {confirmDialog}
     </div>
   );
 }

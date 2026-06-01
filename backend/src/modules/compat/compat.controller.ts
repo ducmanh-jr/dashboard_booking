@@ -1,5 +1,6 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Delete,
   Get,
@@ -8,8 +9,14 @@ import {
   Post,
   Query,
   Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
+import { mkdirSync } from 'fs';
+import { extname, join } from 'path';
+import { diskStorage } from 'multer';
 import { user_type_enum } from '@prisma/client';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -19,6 +26,37 @@ import { Role } from '../../common/enums/role.enum';
 import { AuthService } from '../auth/auth.service';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { CompatService } from './compat.service';
+
+const avatarUploadDirectory = join(process.cwd(), 'uploads', 'avatars');
+const allowedAvatarMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const avatarExtensionsByMimeType: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+};
+
+function avatarFileName(
+  request: { user?: Partial<AuthenticatedUser> },
+  file: Express.Multer.File,
+  callback: (error: Error | null, filename: string) => void,
+) {
+  const extension = avatarExtensionsByMimeType[file.mimetype] ?? (extname(file.originalname || '').toLowerCase() || '.jpg');
+  const safeUserId = String(request.user?.id ?? 'user').replace(/[^a-zA-Z0-9_-]/g, '');
+  callback(null, `${safeUserId}-${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`);
+}
+
+function avatarFileFilter(
+  _request: unknown,
+  file: Express.Multer.File,
+  callback: (error: Error | null, acceptFile: boolean) => void,
+) {
+  if (!allowedAvatarMimeTypes.has(file.mimetype)) {
+    callback(new BadRequestException('File ảnh đại diện không hợp lệ'), false);
+    return;
+  }
+  callback(null, true);
+}
 
 @Controller()
 export class CompatController {
@@ -80,6 +118,25 @@ export class CompatController {
   @Get('account/avatar-upload-url')
   avatarUploadUrl(@CurrentUser() user: AuthenticatedUser) {
     return this.compatService.getAvatarUploadUrl(user);
+  }
+
+  @Post('account/avatar')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: (_request, _file, callback) => {
+        mkdirSync(avatarUploadDirectory, { recursive: true });
+        callback(null, avatarUploadDirectory);
+      },
+      filename: avatarFileName,
+    }),
+    fileFilter: avatarFileFilter,
+    limits: { fileSize: 5 * 1024 * 1024 },
+  }))
+  uploadAccountAvatar(
+    @CurrentUser() user: AuthenticatedUser,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.compatService.updateAccountAvatar(user, file);
   }
 
   /**
@@ -322,6 +379,24 @@ export class CompatController {
     return this.compatService.bookingReport();
   }
 
+  @Roles(Role.ADMIN)
+  @Post('admin/bookings/:id/cancel')
+  adminCancelBooking(@Param('id') id: string) {
+    return this.compatService.adminCancelBooking(id);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post('admin/bookings/:id/mark-paid')
+  adminMarkBookingPaid(@Param('id') id: string) {
+    return this.compatService.adminMarkBookingPaid(id);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post('admin/bookings/:id/reject-cancel')
+  adminRejectBookingCancel(@Param('id') id: string) {
+    return this.compatService.adminRejectBookingCancel(id);
+  }
+
   @Roles(Role.PARTNER)
   @Get('partner/booking-report')
   partnerBookingReport(@CurrentUser() user: AuthenticatedUser) {
@@ -376,18 +451,18 @@ export class CompatController {
   }
 
   @Post('notifications/:id/read')
-  markRead() {
-    return this.compatService.markNotificationRead();
+  markRead(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.compatService.markNotificationRead(user, id);
   }
 
   @Post('notifications/read-all')
-  markAllRead() {
-    return this.compatService.markAllNotificationsRead();
+  markAllRead(@CurrentUser() user: AuthenticatedUser) {
+    return this.compatService.markAllNotificationsRead(user);
   }
 
   @Delete('notifications/:id')
-  deleteNotification() {
-    return this.compatService.deleteNotification();
+  deleteNotification(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.compatService.deleteNotification(user, id);
   }
 
   @Public()

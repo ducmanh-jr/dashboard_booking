@@ -11,3 +11,7 @@ export const markBookingPaid = async (id: number) => {
 export const cancelBooking = async (id: number) => {
   return await api(`/admin/bookings/${id}/cancel`, { method: "POST" });
 };
+
+export const rejectCancelBooking = async (id: number) => {
+  return await api(`/admin/bookings/${id}/reject-cancel`, { method: "POST" });
+};

@@ -5,15 +5,18 @@
   "workspaces": [
     "apps/admin",
     "apps/partner",
+    "apps/customer",
     "packages/*"
   ],
   "scripts": {
     "dev:admin": "npm --workspace apps/admin run dev",
     "dev:partner": "npm --workspace apps/partner run dev",
+    "dev:customer": "npm --workspace apps/customer run dev",
     "typecheck": "npm run typecheck:admin && npm run typecheck:partner",
     "typecheck:admin": "pnpm --filter webadmin exec tsc -p tsconfig.json --noEmit",
     "typecheck:partner": "pnpm --filter webpartner exec tsc -p tsconfig.json --noEmit",
     "build:admin": "npm --workspace apps/admin run build",
-    "build:partner": "npm --workspace apps/partner run build"
+    "build:partner": "npm --workspace apps/partner run build",
+    "build:customer": "npm --workspace apps/customer run build"
   }
 }

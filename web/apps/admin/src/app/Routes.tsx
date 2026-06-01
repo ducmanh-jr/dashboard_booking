@@ -31,6 +31,10 @@ interface RoutesProps {
 
 export default function AppRoutes({ user, unreadCount, setUser, logout, loadUnread }: RoutesProps) {
   const navigate = useNavigate();
+  const updateCurrentUser = (patch: Partial<User>) => {
+    if (user) setUser({ ...user, ...patch });
+  };
+
   return (
     <Suspense fallback={loading}>
       <Routes>
@@ -49,7 +53,7 @@ export default function AppRoutes({ user, unreadCount, setUser, logout, loadUnre
           <Route path="notifications" element={<NotificationsTab onNavigate={(tab, filter, targetId) => navigate(`/${tab}`, { state: { filter, targetId, highlight: true } })} onRefreshCount={loadUnread} />} />
           <Route path="transactions" element={<TransactionsTab user={user} />} />
           <Route path="promotions" element={<PromotionsTab />} />
-          <Route path="account" element={<AccountSettingsPage />} />
+          <Route path="account" element={<AccountSettingsPage onUserUpdated={updateCurrentUser} />} />
         </Route>
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

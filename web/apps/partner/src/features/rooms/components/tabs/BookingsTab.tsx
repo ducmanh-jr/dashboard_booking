@@ -3,6 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchBookingReport, runBookingAction } from "../../../../api/bookingsApi";
 import { fetchRoomDetail } from "../../../../api/roomsApi";
 import { RoomDetailModal } from "../modals/RoomDetailModal";
+import { useConfirmDialog } from "../../../../shared/components/ConfirmDialog";
+import { PARTNER_PORTAL_NAME } from "../../../../shared/config/pageTitles";
+import { usePageTitle } from "../../../../shared/hooks/usePageTitle";
 
 // ---------------------------- Types ----------------------------
 type BookingItem = {
@@ -502,6 +505,7 @@ function DateInput({ value, disabled, onChange, title }: { value: string; disabl
 
 // -------------------- BookingDetailModal --------------------
 function BookingDetailModal({ hotel, onClose, onChanged }: { hotel: HotelReport; onClose: () => void; onChanged: () => void }) {
+  usePageTitle({ title: "Đặt phòng", entity: hotel.propertyName, portal: PARTNER_PORTAL_NAME });
   const [selectedBooking, setSelectedBooking] = useState<BookingItem | null>(null);
   const [activeTab, setActiveTab] = useState<StatusFilter | "unfinished">("unfinished");
   const [viewingRoomId, setViewingRoomId] = useState<number | null>(null);
@@ -652,6 +656,7 @@ function BookingDetailModal({ hotel, onClose, onChanged }: { hotel: HotelReport;
 }
 
 function SingleBookingDetailModal({ booking, onClose, onChanged }: { booking: BookingItem; onClose: () => void; onChanged: () => void }) {
+  usePageTitle({ title: "Đơn đặt phòng", entity: booking.bookingCode, portal: PARTNER_PORTAL_NAME });
   const isCancelled = booking.status === "cancelled";
   const paymentStatus = isCancelled
     ? "Đã hủy"
@@ -660,10 +665,17 @@ function SingleBookingDetailModal({ booking, onClose, onChanged }: { booking: Bo
     : "Chờ thanh toán";
   const [busyAction, setBusyAction] = useState("");
   const [err, setErr] = useState("");
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   async function runAction(action: "check-in" | "check-out" | "no-show") {
     const labels = { "check-in": "check-in", "check-out": "check-out", "no-show": "báo no-show" };
-    if (!window.confirm(`Xác nhận ${labels[action]} đơn ${booking.bookingCode}?`)) return;
+    const ok = await confirm({
+      title: "Xác nhận thao tác lưu trú",
+      message: `Bạn muốn ${labels[action]} đơn ${booking.bookingCode}?`,
+      confirmText: "Thực hiện",
+      tone: action === "no-show" ? "danger" : "default",
+    });
+    if (!ok) return;
     if (busyAction) return; // prevent concurrent actions
     setBusyAction(action);
     setErr("");
@@ -726,7 +738,7 @@ function SingleBookingDetailModal({ booking, onClose, onChanged }: { booking: Bo
           </InfoBlock>
           <InfoBlock title="Thao tác lưu trú">
             <div className="flex flex-wrap gap-2">
-              {booking.status === "confirmed" && (
+              {["pending", "confirmed"].includes(booking.status) && (
                 <button
                   type="button"
                   onClick={() => runAction("check-in")}
@@ -763,6 +775,9 @@ function SingleBookingDetailModal({ booking, onClose, onChanged }: { booking: Bo
           </InfoBlock>
         </div>
       </div>
+      <div onClick={(e) => e.stopPropagation()}>
+        {confirmDialog}
+      </div>
     </div>
   );
 }
@@ -797,6 +812,7 @@ function MoneyRow({ label, value, danger, muted }: { label: string; value: strin
 function RoomDetailModalLoader({ propertyId, onClose }: { propertyId: number; onClose: () => void }) {
   const [room, setRoom] = useState<any>(null);
   const [err, setErr] = useState("");
+  usePageTitle({ title: "Khách sạn", entity: room?.name, portal: PARTNER_PORTAL_NAME });
   
   useEffect(() => {
     let active = true;

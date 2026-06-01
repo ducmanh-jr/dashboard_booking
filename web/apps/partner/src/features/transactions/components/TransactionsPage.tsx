@@ -10,6 +10,7 @@ import {
   AlertCircle,
   Receipt
 } from "lucide-react";
+import { api } from "@nowayhome/api-client";
 
 interface Transaction {
   id: string;
@@ -63,23 +64,21 @@ export function TransactionsPage() {
   const [txAmount, setTxAmount] = useState("");
   const [isProcessingTx, setIsProcessingTx] = useState(false);
 
-  // Invoice & Debt Modal
+  // Invoice modal
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
-  const [showDebtModal, setShowDebtModal] = useState(false);
-  const [debtBooking, setDebtBooking] = useState<any>(null);
+  const [txError, setTxError] = useState("");
 
   const loadStatus = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/partner/nowayhomepay/status", {
+      const data = await api("/partner/nowayhomepay/status", {
         headers: {
           "Cache-Control": "no-cache, no-store, must-revalidate",
           "Pragma": "no-cache",
           "Expires": "0"
         }
       });
-      const data = await res.json();
       
       // Safety check: if data has no registered field (e.g. error response), don't wipe out state
       if (data && typeof data.registered !== 'undefined') {
@@ -98,80 +97,57 @@ export function TransactionsPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTxError("");
     if (!bankAccountNumber.trim() || !bankAccountHolder.trim()) {
-      alert("Vui lòng điền đầy đủ số tài khoản và tên chủ tài khoản");
+      setTxError("Vui lòng điền đầy đủ số tài khoản và tên chủ tài khoản");
       return;
     }
 
     setRegistering(true);
     setStep(1);
-
-    setTimeout(() => {
+    try {
       setStep(2);
-      setTimeout(() => {
-        setStep(3);
-        setTimeout(async () => {
-          try {
-            const response = await fetch("/api/partner/nowayhomepay/register", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                bankName,
-                bankAccountNumber,
-                bankAccountHolder,
-              }),
-            });
-            if (response.ok) {
-              await loadStatus();
-            }
-          } catch (err) {
-            console.error("Error registering:", err);
-          } finally {
-            setRegistering(false);
-            setStep(0);
-          }
-        }, 800);
-      }, 800);
-    }, 800);
+      await api("/partner/nowayhomepay/register", {
+        method: "POST",
+        body: JSON.stringify({ bankName, bankAccountNumber, bankAccountHolder }),
+      });
+      setStep(3);
+      await loadStatus();
+    } catch (err: any) {
+      setTxError(err.message || "Không thể kích hoạt NowayhomePay");
+    } finally {
+      setRegistering(false);
+      setStep(0);
+    }
   };
 
   const handleTxSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTxError("");
     if (!txAmount || isNaN(Number(txAmount)) || Number(txAmount) <= 0) {
-      alert("Vui lòng nhập số tiền hợp lệ");
+      setTxError("Vui lòng nhập số tiền hợp lệ");
       return;
     }
 
     if (txType === "WITHDRAW" && Number(txAmount) > (status.walletBalance || 0)) {
-      alert("Số dư ví không đủ để thực hiện yêu cầu rút tiền này!");
+      setTxError("Số dư ví không đủ để thực hiện yêu cầu rút tiền này");
       return;
     }
 
     setIsProcessingTx(true);
-    setTimeout(async () => {
-      try {
-        const res = await fetch("/api/partner/nowayhomepay/transaction", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: txType,
-            amount: Number(txAmount),
-          }),
-        });
-
-        if (res.ok) {
-          setShowTxModal(false);
-          setTxAmount("");
-          await loadStatus();
-        } else {
-          alert("Giao dịch ví thất bại!");
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsProcessingTx(false);
-      }
-    }, 1200);
+    try {
+      await api("/partner/nowayhomepay/transaction", {
+        method: "POST",
+        body: JSON.stringify({ type: txType, amount: Number(txAmount) }),
+      });
+      setShowTxModal(false);
+      setTxAmount("");
+      await loadStatus();
+    } catch (err: any) {
+      setTxError(err.message || "Giao dịch ví thất bại");
+    } finally {
+      setIsProcessingTx(false);
+    }
   };
 
   if (loading) {
@@ -231,6 +207,7 @@ export function TransactionsPage() {
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">Họ và tên chủ tài khoản</label>
                 <input type="text" placeholder="Ví dụ: NGUYEN VAN A" value={bankAccountHolder} onChange={(e) => setBankAccountHolder(e.target.value.toUpperCase())} className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500" required />
               </div>
+              {txError && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{txError}</div>}
               <button type="submit" className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 transition">
                 Xác thực & Kết nối tài khoản
               </button>
@@ -286,7 +263,7 @@ export function TransactionsPage() {
           </div>
           <div>
             <h4 className="font-bold text-sm">Cảnh báo: Số dư ví đối tác đang bị âm!</h4>
-            <p className="mt-1 text-xs text-red-700">Ví của bạn hiện đang có số dư âm là <span className="font-bold text-red-900">{status.walletBalance?.toLocaleString("vi-VN")} đ</span> do khấu trừ hoa hồng của các đơn thanh toán tại chỗ. Vui lòng thanh toán công nợ hoặc nạp tiền để tiếp tục hiển thị khách sạn trên kết quả tìm kiếm.</p>
+            <p className="mt-1 text-xs text-red-700">Ví của bạn hiện đang có số dư âm là <span className="font-bold text-red-900">{status.walletBalance?.toLocaleString("vi-VN")} đ</span> do hệ thống tự động khấu trừ hoa hồng của các đơn thanh toán tại chỗ.</p>
           </div>
         </div>
       )}
@@ -399,7 +376,7 @@ export function TransactionsPage() {
                 {groupedBookings.map((b) => {
                   const isOnline = b.method === "ONLINE";
                   const totalGross = b.customerPay;
-                  const commissionOwed = totalGross * 0.1;
+                  const commissionOwed = Number(b.commissionDeducted || 0);
                   
                   return (
                     <tr key={b.bookingCode} className="hover:bg-slate-50 transition-colors">
@@ -434,31 +411,21 @@ export function TransactionsPage() {
                               Chờ hệ thống chuyển khoản...
                             </span>
                           )
+                        ) : commissionOwed > 0 ? (
+                          <button
+                            onClick={() => {
+                              setSelectedInvoice({ ...b, type: "COMMISSION" });
+                              setShowInvoiceModal(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-1.5 text-emerald-700 hover:bg-emerald-100 transition border border-emerald-200 shadow-sm"
+                          >
+                            <Check size={12} />
+                            <span className="font-bold text-[10px]">Đã khấu trừ hoa hồng: {commissionOwed.toLocaleString("vi-VN")} đ</span>
+                          </button>
                         ) : (
-                          // CASH: Partner owes Commission
-                          b.commissionDeducted > 0 ? (
-                            <button
-                              onClick={() => {
-                                setSelectedInvoice({ ...b, type: "COMMISSION_PAID" });
-                                setShowInvoiceModal(true);
-                              }}
-                              className="inline-flex items-center gap-1.5 rounded-md bg-slate-50 px-2.5 py-1.5 text-slate-600 hover:bg-slate-100 transition shadow-sm border border-slate-200"
-                            >
-                              <Check size={12} className="text-emerald-500" />
-                              <span className="font-bold text-[10px]">Đã nộp hoa hồng ({b.commissionDeducted.toLocaleString("vi-VN")} đ)</span>
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setDebtBooking(b);
-                                setShowDebtModal(true);
-                              }}
-                              className="inline-flex items-center gap-1.5 rounded-md bg-red-50 px-2.5 py-1.5 text-red-600 hover:bg-red-100 transition border border-red-200 shadow-sm"
-                            >
-                              <AlertCircle size={12} />
-                              <span className="font-bold text-[10px]">Nợ hoa hồng: {commissionOwed.toLocaleString("vi-VN")} đ</span>
-                            </button>
-                          )
+                          <span className="inline-flex items-center gap-1.5 text-slate-400 font-semibold text-[10px] bg-slate-50 px-2.5 py-1.5 rounded-md">
+                            Chưa ghi nhận hoa hồng
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -506,6 +473,7 @@ export function TransactionsPage() {
                   Số tài khoản: <strong className="text-slate-800">{status.bankAccountNumber}</strong>
                 </div>
               </div>
+              {txError && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{txError}</div>}
 
               <button
                 type="submit"
@@ -522,56 +490,6 @@ export function TransactionsPage() {
                 )}
               </button>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Debt Payment Modal */}
-      {showDebtModal && debtBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-in fade-in duration-300">
-          <div className="relative w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl animate-in zoom-in-95 duration-300">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-600 mb-5 border border-red-100">
-              <AlertCircle size={28} />
-            </div>
-            <h2 className="text-center text-xl font-black text-slate-900 tracking-tight">
-              Thanh toán hoa hồng
-            </h2>
-            <p className="mt-3 text-center text-[11px] text-slate-500 leading-relaxed px-2">
-              Booking <strong className="text-indigo-600">{debtBooking.bookingCode}</strong> được khách thanh toán trực tiếp bằng tiền mặt. Vui lòng thanh toán khoản phí hoa hồng <strong className="text-slate-700">10%</strong> cho nền tảng.
-            </p>
-            <div className="mt-6 rounded-2xl bg-slate-50 p-5 border border-slate-100">
-              <div className="flex justify-between text-xs mb-3">
-                <span className="text-slate-500 font-medium">Khách đã trả (Gross):</span>
-                <span className="font-bold text-slate-700">{debtBooking.customerPay.toLocaleString("vi-VN")} đ</span>
-              </div>
-              <div className="flex justify-between text-sm pt-3 border-t border-slate-200/60">
-                <span className="font-bold text-slate-800">Cần thanh toán:</span>
-                <span className="font-black text-red-600 text-base">{(debtBooking.customerPay * 0.1).toLocaleString("vi-VN")} đ</span>
-              </div>
-            </div>
-            
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setShowDebtModal(false)}
-                className="flex-1 rounded-xl bg-slate-100 py-3 text-xs font-bold text-slate-500 hover:bg-slate-200 transition"
-              >
-                Để sau
-              </button>
-              <button
-                onClick={async () => {
-                  setIsProcessingTx(true);
-                  setTimeout(async () => {
-                    alert("Thanh toán thành công! Hệ thống đã trừ tiền trong ví (hoặc giả lập quét QR).");
-                    setIsProcessingTx(false);
-                    setShowDebtModal(false);
-                  }, 1500);
-                }}
-                disabled={isProcessingTx}
-                className="flex-[2] flex items-center justify-center gap-2 rounded-xl bg-red-600 py-3 text-xs font-bold text-white hover:bg-red-700 shadow-lg shadow-red-600/25 transition disabled:opacity-70"
-              >
-                {isProcessingTx ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : "Thanh toán ngay"}
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -607,14 +525,19 @@ export function TransactionsPage() {
                   <span className="font-bold text-slate-800">{selectedInvoice.customerPay.toLocaleString("vi-VN")} đ</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500 font-medium">Phí nền tảng (10%)</span>
-                  <span className="font-bold text-red-500">- {(selectedInvoice.customerPay * 0.1).toLocaleString("vi-VN")} đ</span>
+                  <span className="text-slate-500 font-medium">Phí nền tảng</span>
+                  <span className="font-bold text-red-500">
+                    - {(selectedInvoice.type === "EARNING"
+                      ? Math.max(0, Number(selectedInvoice.customerPay || 0) - Number(selectedInvoice.systemPayout || 0))
+                      : Number(selectedInvoice.commissionDeducted || 0)
+                    ).toLocaleString("vi-VN")} đ
+                  </span>
                 </div>
               </div>
               
               <div className="mt-6 border-t-2 border-dashed border-slate-200 pt-5 flex justify-between items-center">
                 <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider">
-                  {selectedInvoice.type === "EARNING" ? "Thực nhận về ví" : "Đã nộp hoa hồng"}
+                  {selectedInvoice.type === "EARNING" ? "Thực nhận về ví" : "Đã khấu trừ hoa hồng"}
                 </span>
                 <span className={`text-xl font-black tracking-tight ${selectedInvoice.type === "EARNING" ? "text-emerald-600" : "text-slate-800"}`}>
                   {selectedInvoice.type === "EARNING" ? selectedInvoice.systemPayout.toLocaleString("vi-VN") : selectedInvoice.commissionDeducted.toLocaleString("vi-VN")} đ

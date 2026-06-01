@@ -10,15 +10,18 @@ import {
   LogOut,
   Menu,
   UserCog,
-  X,
   CreditCard,
   Tag
 } from "lucide-react";
 import { useState } from "react";
 import { User } from "../types";
 import { cn, Button } from "../components/ui";
+import { ADMIN_PORTAL_NAME, ADMIN_ROUTE_TITLES } from "../config/pageTitles";
+import { useRoutePageTitle } from "../hooks/usePageTitle";
+import { PortalBrandHeader } from "../components/PortalBrandHeader";
 
 export function AdminLayout({ user, onLogout, notificationCount }: { user: User; onLogout: () => void, notificationCount: number }) {
+  useRoutePageTitle(ADMIN_PORTAL_NAME, ADMIN_ROUTE_TITLES, "Admin");
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
@@ -45,12 +48,7 @@ export function AdminLayout({ user, onLogout, notificationCount }: { user: User;
         )}
       >
         <div className="h-full flex flex-col">
-          <div className="h-16 px-5 border-b flex items-center justify-between">
-            <span className="font-bold text-xl tracking-tight">NWH Admin</span>
-            <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setIsSidebarOpen(false)}>
-              <X size={20} />
-            </Button>
-          </div>
+          <PortalBrandHeader onCloseMobile={() => setIsSidebarOpen(false)} />
           
           <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
             {navItems.map((item) => {
@@ -110,7 +108,7 @@ export function AdminLayout({ user, onLogout, notificationCount }: { user: User;
           <Button variant="ghost" size="sm" onClick={() => setIsSidebarOpen(true)}>
             <Menu size={20} />
           </Button>
-          <span className="ml-4 font-bold">NWH Admin</span>
+          <span className="ml-4 text-sm font-black tracking-tight text-slate-950">NoWayHome Admin</span>
         </header>
 
         <main className="flex-1 overflow-y-auto">

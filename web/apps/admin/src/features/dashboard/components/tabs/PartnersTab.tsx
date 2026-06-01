@@ -7,6 +7,7 @@ import { PartnerEditModal } from "../modals/PartnerEditModal";
 import { PartnerHotelRoomsModal } from "../modals/PartnerHotelRoomsModal";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, Button, Badge, cn } from "../../../../shared/components/ui";
 import { Search, ChevronUp, ChevronDown, Trash2, Edit, ExternalLink, Check, XCircle } from "lucide-react";
+import { useConfirmDialog } from "../../../../shared/components/ConfirmDialog";
 
 function removePartnerFromCache(oldData: any, deletedId: number) {
   if (Array.isArray(oldData)) return oldData.filter((partner: Partner) => partner.id !== deletedId);
@@ -33,6 +34,7 @@ export function PartnersTab({ initialFilter = "pending" }: { initialFilter?: str
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
   const [mounted, setMounted] = useState(false);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   useEffect(() => {
     setMounted(true);
@@ -181,8 +183,14 @@ export function PartnersTab({ initialFilter = "pending" }: { initialFilter?: str
                     onApprove={() => approveMutation.mutate(partner.id)}
                     onReject={() => setReject({ id: partner.id, reason: "" })}
                     onEdit={() => setEditingPartner(partner)}
-                    onDelete={() => {
-                      if (confirm(`Xóa đối tác "${partner.fullName}"?`)) deleteMutation.mutate(partner.id);
+                    onDelete={async () => {
+                      const ok = await confirm({
+                        title: "Xóa đối tác",
+                        message: `Đối tác "${partner.fullName}" sẽ bị xóa khỏi danh sách quản trị.`,
+                        confirmText: "Xóa",
+                        tone: "danger",
+                      });
+                      if (ok) deleteMutation.mutate(partner.id);
                     }}
                     onViewRooms={() => setSelectedPartner(partner)}
                     isProcessing={approveMutation.isPending}
@@ -212,6 +220,7 @@ export function PartnersTab({ initialFilter = "pending" }: { initialFilter?: str
         />
       )}
       {selectedPartner && <PartnerHotelRoomsModal partner={selectedPartner} onClose={() => setSelectedPartner(null)} />}
+      {confirmDialog}
     </div>
   );
 }

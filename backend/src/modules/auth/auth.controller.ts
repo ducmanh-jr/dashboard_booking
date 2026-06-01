@@ -166,8 +166,8 @@ export class AuthController {
       role: user.userType,
       status: user.status,
       avatarUrl: user.avatarUrl,
-      isSuperAdmin: this.authService.isSuperAdminEmail(user.email),
-      title: this.authService.isSuperAdminEmail(user.email) ? 'Admin tổng' : 'Quản trị viên',
+      isSuperAdmin: user.isSuperAdmin,
+      title: user.isSuperAdmin ? 'Admin tổng' : 'Quản trị viên',
     };
   }
 }

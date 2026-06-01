@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   DollarSign, 
   TrendingUp, 
@@ -73,6 +73,8 @@ interface SystemTransaction {
   targetHolder: string;
   status: string;
   createdAt: string;
+  description?: string;
+  isOpeningBalance?: boolean;
 }
 
 interface TaxRecord {
@@ -99,7 +101,7 @@ interface DashboardData {
 }
 
 export function TransactionsTab({ user }: { user?: User | null }) {
-  const isSuperAdmin = user?.email === "nguyenducmanh.ovaltine@gmail.com" || Boolean(user?.isSuperAdmin);
+  const isSuperAdmin = Boolean(user?.isSuperAdmin);
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
@@ -115,7 +117,7 @@ export function TransactionsTab({ user }: { user?: User | null }) {
 
   // Selected entities for Modals
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-  const [selectedPartnerForWallet, setSelectedPartnerForWallet] = useState<Partner | null>(null);
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
   
   // Modals state
   const [showSystemTxModal, setShowSystemTxModal] = useState(false);
@@ -126,11 +128,6 @@ export function TransactionsTab({ user }: { user?: User | null }) {
   const [systemTxHolder, setSystemTxHolder] = useState("");
   const [isProcessingSystemTx, setIsProcessingSystemTx] = useState(false);
 
-  // Partner Quick Tx modal
-  const [showPartnerTxModal, setShowPartnerTxModal] = useState(false);
-  const [partnerTxType, setPartnerTxType] = useState<"DEPOSIT" | "WITHDRAW">("DEPOSIT");
-  const [partnerTxAmount, setPartnerTxAmount] = useState("");
-  const [isProcessingPartnerTx, setIsProcessingPartnerTx] = useState(false);
 
   // Tax paying state
   const [payingTaxMonth, setPayingTaxMonth] = useState<string | null>(null);
@@ -155,6 +152,15 @@ export function TransactionsTab({ user }: { user?: User | null }) {
     loadData();
   }, []);
 
+  const sortedPartners = useMemo(() => {
+    return [...(data?.partners || [])].sort((a, b) => {
+      if (b.walletBalance !== a.walletBalance) return b.walletBalance - a.walletBalance;
+      return a.businessName.localeCompare(b.businessName);
+    });
+  }, [data?.partners]);
+
+  const selectedPartner = sortedPartners.find((partner) => partner.id === selectedPartnerId) || sortedPartners[0] || null;
+
   const handleSystemTxSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!systemTxAmount || isNaN(Number(systemTxAmount)) || Number(systemTxAmount) <= 0) {
@@ -163,110 +169,67 @@ export function TransactionsTab({ user }: { user?: User | null }) {
     }
 
     setIsProcessingSystemTx(true);
-    // Simulate 3 loops spinner
-    setTimeout(async () => {
-      try {
-        const res = await fetch("/api/admin/system/transaction", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: systemTxType,
-            amount: Number(systemTxAmount),
-            targetBank: systemTxBank,
-            targetAccount: systemTxAccount,
-            targetHolder: systemTxHolder,
-          }),
-        });
+    try {
+      const res = await fetch("/api/admin/system/transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: systemTxType,
+          amount: Number(systemTxAmount),
+          targetBank: systemTxBank,
+          targetAccount: systemTxAccount,
+          targetHolder: systemTxHolder,
+        }),
+      });
 
-        if (res.ok) {
-          setShowSystemTxModal(false);
-          setSystemTxAmount("");
-          setSystemTxAccount("");
-          setSystemTxHolder("");
-          await loadData();
-        } else {
-          const err = await res.json();
-          alert(err.message || "Giao dịch không thành công");
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsProcessingSystemTx(false);
+      if (res.ok) {
+        setShowSystemTxModal(false);
+        setSystemTxAmount("");
+        setSystemTxAccount("");
+        setSystemTxHolder("");
+        await loadData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || "Giao dịch không thành công");
       }
-    }, 1800);
-  };
-
-  const handlePartnerTxSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedPartnerForWallet) return;
-    if (!partnerTxAmount || isNaN(Number(partnerTxAmount)) || Number(partnerTxAmount) <= 0) {
-      alert("Vui lòng nhập số tiền hợp lệ");
-      return;
+    } catch (err) {
+      console.error(err);
+      alert("Không thể kết nối máy chủ");
+    } finally {
+      setIsProcessingSystemTx(false);
     }
-
-    setIsProcessingPartnerTx(true);
-    setTimeout(async () => {
-      try {
-        const res = await fetch("/api/admin/partner/transaction", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            partnerId: selectedPartnerForWallet.id,
-            type: partnerTxType,
-            amount: Number(partnerTxAmount),
-          }),
-        });
-
-        if (res.ok) {
-          setShowPartnerTxModal(false);
-          setPartnerTxAmount("");
-          setSelectedPartnerForWallet(null);
-          await loadData();
-        } else {
-          alert("Nạp/rút ví đối tác thất bại");
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsProcessingPartnerTx(false);
-      }
-    }, 1200);
-  };
-
-  const handlePayTax = (tax: TaxRecord) => {
-    if (!isSuperAdmin) {
-      alert("Chỉ Admin tổng mới có quyền đóng thuế!");
-      return;
-    }
-    setTaxToPay(tax);
   };
 
   const confirmPayTax = async () => {
     if (!taxToPay) return;
     setPayingTaxMonth(taxToPay.month);
-    setTimeout(async () => {
-      try {
-        const res = await fetch("/api/admin/system/pay-tax", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            month: taxToPay.month,
-            amount: taxToPay.taxDue,
-          }),
-        });
+    try {
+      const res = await fetch("/api/admin/system/pay-tax", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          month: taxToPay.month,
+          amount: taxToPay.taxDue,
+        }),
+      });
 
-        if (res.ok) {
-          await loadData();
-          setTaxToPay(null);
-        } else {
-          alert("Nộp thuế thất bại");
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setPayingTaxMonth(null);
+      if (res.ok) {
+        await loadData();
+        setTaxToPay(null);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || "Nộp thuế thất bại");
       }
-    }, 1500);
+    } catch (err) {
+      console.error(err);
+      alert("Không thể kết nối máy chủ");
+    } finally {
+      setPayingTaxMonth(null);
+    }
+  };
+
+  const handlePayTax = (tax: TaxRecord) => {
+    setTaxToPay(tax);
   };
 
   if (loading || !data) {
@@ -606,7 +569,114 @@ export function TransactionsTab({ user }: { user?: User | null }) {
             <p className="text-[11px] text-slate-500 mt-1">Xem số dư ví thanh toán của đối tác và lịch sử các giao dịch nạp/rút đối soát chi tiết của từng host.</p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
+            <div className="rounded-xl border bg-white shadow-xs dark:bg-slate-900">
+              <div className="border-b p-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black text-slate-950 dark:text-white">Danh sách đối tác</h3>
+                  <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-700">Ưu tiên nhiều tiền</span>
+                </div>
+                <p className="mt-1 text-[11px] text-slate-500">Sắp xếp theo số dư ví giảm dần. Bấm vào từng dòng để xem chi tiết.</p>
+              </div>
+              <div className="max-h-[680px] overflow-y-auto p-2">
+                {sortedPartners.map((partner, index) => {
+                  const active = selectedPartner?.id === partner.id;
+                  const isNegative = partner.walletBalance < 0;
+                  return (
+                    <button
+                      key={partner.id}
+                      type="button"
+                      onClick={() => setSelectedPartnerId(partner.id)}
+                      className={`mb-2 flex w-full items-center gap-3 rounded-lg border p-3 text-left transition ${active ? "border-indigo-200 bg-indigo-50 shadow-sm" : "border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50"}`}
+                    >
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-black ${active ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500"}`}>{index + 1}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-black text-slate-950">{partner.businessName}</div>
+                        <div className="truncate text-[11px] text-slate-500">{partner.email}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-sm font-black ${isNegative ? "text-red-600" : "text-emerald-600"}`}>{partner.walletBalance.toLocaleString("vi-VN")} đ</div>
+                        <div className="text-[10px] font-bold uppercase text-slate-400">{partner.depositsAndWithdrawals.length} nạp/rút</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {selectedPartner ? (
+                <>
+                  <div className="rounded-xl border bg-white p-5 shadow-xs dark:bg-slate-900">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="truncate text-xl font-black text-slate-950 dark:text-white">{selectedPartner.businessName}</h3>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${selectedPartner.registered ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                            {selectedPartner.registered ? "Đã liên kết" : "Chưa kích hoạt"}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">{selectedPartner.email}</p>
+                      </div>
+                      <div className="grid min-w-[260px] gap-2">
+                        <div className="rounded-xl bg-slate-50 p-4">
+                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Số dư ví hiện tại</div>
+                          <div className={`mt-1 text-2xl font-black ${selectedPartner.walletBalance < 0 ? "text-red-600" : "text-emerald-600"}`}>{selectedPartner.walletBalance.toLocaleString("vi-VN")} đ</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-xl border bg-white p-4 shadow-xs dark:bg-slate-900">
+                      <div className="flex items-center justify-between border-b pb-3">
+                        <h4 className="text-sm font-black text-slate-950 dark:text-white">Danh sách khách sạn</h4>
+                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-700">{selectedPartner.propertyNames.length} khách sạn</span>
+                      </div>
+                      <div className="mt-3 max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                        {selectedPartner.propertyNames.length === 0 ? (
+                          <div className="rounded-lg bg-slate-50 p-4 text-center text-xs font-medium text-slate-400">Chưa có khách sạn liên kết</div>
+                        ) : selectedPartner.propertyNames.map((name, index) => (
+                          <div key={`${selectedPartner.id}-${name}-${index}`} className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50/60 p-3">
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[10px] font-black text-indigo-700 shadow-xs">{index + 1}</div>
+                            <div className="min-w-0 flex-1 truncate text-xs font-bold text-slate-700">{name}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+
+                    <div className="rounded-xl border bg-white p-4 shadow-xs dark:bg-slate-900">
+                      <div className="flex items-center justify-between border-b pb-3">
+                        <h4 className="text-sm font-black text-slate-950 dark:text-white">Giao dịch nạp/rút ví</h4>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">{selectedPartner.depositsAndWithdrawals.length} giao dịch</span>
+                      </div>
+                      <div className="mt-3 max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                        {selectedPartner.depositsAndWithdrawals.length === 0 ? (
+                          <div className="rounded-lg bg-slate-50 p-4 text-center text-xs font-medium text-slate-400">Chưa phát sinh giao dịch nạp/rút ví</div>
+                        ) : selectedPartner.depositsAndWithdrawals.map((tx: any) => (
+                          <div key={tx.id} className="flex items-center justify-between rounded-lg border border-slate-100 p-3">
+                            <div>
+                              <div className={`text-xs font-black ${tx.type === "DEPOSIT" ? "text-emerald-600" : "text-amber-600"}`}>{tx.type === "DEPOSIT" ? "Nạp ví" : "Rút ví"}</div>
+                              <div className="text-[10px] text-slate-400">{new Date(tx.createdAt).toLocaleString("vi-VN")}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-black text-slate-900">{Number(tx.amount || 0).toLocaleString("vi-VN")} đ</div>
+                              <div className="text-[10px] font-bold uppercase text-slate-400">{tx.status || "SUCCESS"}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-xl border bg-white p-8 text-center text-sm text-slate-500 shadow-xs">Chưa có đối tác để hiển thị.</div>
+              )}
+            </div>
+          </div>
+
+          <div className="hidden">
             {data.partners.map((partner) => {
               const isNegative = partner.walletBalance < 0;
               return (
@@ -781,9 +851,12 @@ export function TransactionsTab({ user }: { user?: User | null }) {
                         </span>
                         <div>
                           <span className="font-bold text-slate-800 dark:text-slate-200">
-                            {tx.type === "DEPOSIT" ? "Nạp tiền" : "Chuyển khoản"}
+                            {tx.description || (tx.type === "DEPOSIT" ? "Nạp tiền" : "Chuyển khoản")}
                           </span>
-                          <span className="block text-[9px] text-slate-400">{tx.targetBank} • {tx.targetAccount}</span>
+                          <span className="block text-[9px] text-slate-400">
+                            {tx.targetBank} • {tx.targetAccount}
+                            {tx.isOpeningBalance ? " • Admin tổng" : ""}
+                          </span>
                         </div>
                       </div>
                       <div className="text-right">
@@ -1024,53 +1097,6 @@ export function TransactionsTab({ user }: { user?: User | null }) {
         </div>
       )}
 
-      {/* Partner quick tx modal */}
-      {showPartnerTxModal && selectedPartnerForWallet && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900 border border-slate-100">
-            <button
-              onClick={() => setShowPartnerTxModal(false)}
-              className="absolute right-4 top-4 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-            >
-              <X size={16} />
-            </button>
-
-            <h2 className="text-base font-black text-slate-900 dark:text-white">
-              {partnerTxType === "DEPOSIT" ? "Nạp tiền đối soát vào ví" : "Rút tiền đối soát từ ví"}
-            </h2>
-            <p className="text-[10px] text-slate-400 mt-1">Đối tác: {selectedPartnerForWallet.businessName}</p>
-
-            <form onSubmit={handlePartnerTxSubmit} className="mt-4 space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Số tiền (VND)</label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: 500000"
-                  value={partnerTxAmount}
-                  onChange={(e) => setPartnerTxAmount(e.target.value.replace(/\D/g, ""))}
-                  className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500/10"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={isProcessingPartnerTx}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-lg transition flex items-center justify-center gap-2"
-              >
-                {isProcessingPartnerTx ? (
-                  <>
-                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                    <span>Đang cập nhật ví đối tác...</span>
-                  </>
-                ) : (
-                  <span>Xác nhận giao dịch ví</span>
-                )}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Tax Payment Confirmation Modal */}
       {taxToPay && (

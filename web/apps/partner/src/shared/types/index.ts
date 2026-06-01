@@ -1,4 +1,13 @@
-export type User = { id: number; email: string; fullName: string; role: string; status: string };
+export type User = {
+  id: number;
+  email: string;
+  fullName: string;
+  role: string;
+  status: string;
+  avatarUrl?: string | null;
+  isSuperAdmin?: boolean;
+  title?: string;
+};
 
 export type Price = {
   id?: number;
@@ -83,6 +92,8 @@ export type PartnerNotification = {
   title: string;
   body: string | null;
   type: string;
+  entityType?: string | null;
+  entityId?: number | null;
   createdAt: string;
   isRead: boolean;
 };

@@ -1,7 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsDateString,
+  IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
@@ -40,6 +42,21 @@ export class SearchPropertiesDto {
   @IsNumber()
   @Min(0)
   max_price?: number;
+
+  @ApiPropertyOptional({ example: 'hotel,resort' })
+  @IsOptional()
+  @IsString()
+  property_type?: string;
+
+  @ApiPropertyOptional({ example: 'pool,wifi' })
+  @IsOptional()
+  @IsString()
+  amenities?: string;
+
+  @ApiPropertyOptional({ example: 'lowest_price', enum: ['best_match', 'lowest_price', 'highest_price', 'highest_rating'] })
+  @IsOptional()
+  @IsString()
+  sort_by?: string = 'best_match';
 
   @ApiPropertyOptional({ example: '2026-06-01' })
   @IsOptional()

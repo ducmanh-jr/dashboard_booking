@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { fetchNotifications, markAsRead, deleteNotification, markReadAll as markReadAllApi } from "../../../../api/notificationsApi";
 import { AppNotification } from "../../../../shared/types";
 import { cn } from "../../../../shared/components/ui";
+import { useConfirmDialog } from "../../../../shared/components/ConfirmDialog";
 
 function formatType(type: string) {
   return type.replace(/_/g, " ");
@@ -27,6 +28,7 @@ export function NotificationsTab({ onNavigate, onRefreshCount }: { onNavigate: (
   const [list, setList] = useState<AppNotification[]>(cachedAdminNotificationList || []);
   const [isLoading, setIsLoading] = useState(!cachedAdminNotificationList);
   const [error, setError] = useState("");
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   useEffect(() => {
     load();
@@ -64,7 +66,13 @@ export function NotificationsTab({ onNavigate, onRefreshCount }: { onNavigate: (
 
   async function remove(id: number, event: React.MouseEvent) {
     event.stopPropagation();
-    if (!confirm("Xóa thông báo này?")) return;
+    const ok = await confirm({
+      title: "Xóa thông báo",
+      message: "Thông báo này sẽ bị xóa khỏi danh sách.",
+      confirmText: "Xóa",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await deleteNotification(id);
       updateList((items) => items.filter((item) => item.id !== id));
@@ -168,6 +176,7 @@ export function NotificationsTab({ onNavigate, onRefreshCount }: { onNavigate: (
           ))}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

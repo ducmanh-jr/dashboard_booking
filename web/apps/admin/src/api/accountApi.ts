@@ -51,32 +51,19 @@ export const updateAccountProfile = async (data: {
   });
 };
 
-export const fetchAvatarUploadUrl = async (): Promise<{
-  signature: string;
-  timestamp: number;
-  cloudName: string;
-  apiKey: string;
-  folder: string;
-}> => {
-  return await api("/account/avatar-upload-url");
-};
-
 export const uploadAvatarFile = async (file: File): Promise<string> => {
-  const config = await fetchAvatarUploadUrl();
   const body = new FormData();
   body.append("file", file);
-  body.append("api_key", config.apiKey);
-  body.append("timestamp", String(config.timestamp));
-  body.append("signature", config.signature);
-  body.append("folder", config.folder);
 
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${config.cloudName}/image/upload`, {
+  const response = await fetch("/api/account/avatar", {
     method: "POST",
+    credentials: "include",
     body,
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || !data.secure_url) {
-    throw new Error(data.error?.message || "Không thể tải ảnh đại diện.");
+  if (!response.ok || !data.avatarUrl) {
+    const message = Array.isArray(data.message) ? data.message.join(", ") : data.message;
+    throw new Error(message || data.error || "Không thể tải ảnh đại diện.");
   }
-  return data.secure_url;
+  return data.avatarUrl;
 };

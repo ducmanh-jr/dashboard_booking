@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { searchPlaces, createRoom, requestUpdateRoom, fetchNearbyPlaces } from "../../../api/roomsApi";
+import { PARTNER_PORTAL_NAME } from "../../../shared/config/pageTitles";
+import { usePageTitle } from "../../../shared/hooks/usePageTitle";
 import { Room, NearbyPlace, ROOM_TYPES, CÓMMON_AMENITIES } from "../../../shared/types";
 
 const REQUIRED_IMAGE_SLOTS = [
@@ -197,6 +199,16 @@ function Input({ label, value, onChange, type = "text", required }: { label: str
   );
 }
 
+function positiveNumber(value: string) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue > 0;
+}
+
+function positiveInteger(value: string) {
+  const numberValue = Number(value);
+  return Number.isInteger(numberValue) && numberValue > 0;
+}
+
 function buildRequiredImageState(room?: Room | null) {
   return Object.fromEntries(
     REQUIRED_IMAGE_SLOTS.map((slot) => {
@@ -227,6 +239,12 @@ export function RoomEditorForm({
   onDone: (message: string) => void;
   onCancel?: () => void;
 }) {
+  usePageTitle({
+    title: mode === "create" ? "Thêm khách sạn" : "Chỉnh sửa khách sạn",
+    entity: mode === "edit" ? room?.name : undefined,
+    portal: PARTNER_PORTAL_NAME,
+    restoreOnUnmount: false,
+  });
   const [step, setStep] = useState(1);
   const [name, setName] = useState(room?.name || "");
   const [description, setDescription] = useState(room?.description || "");
@@ -371,7 +389,7 @@ export function RoomEditorForm({
   }
 
   const validPrices = prices
-    .filter((item) => item.label.trim() && Number(item.pricePerNight) > 0)
+    .filter((item) => item.label.trim() && positiveNumber(item.pricePerNight) && positiveInteger(item.totalInventory || "1"))
     .map((item) => ({
       label: item.label.trim(),
       pricePerNight: Number(item.pricePerNight),
@@ -418,12 +436,24 @@ export function RoomEditorForm({
   }
 
   async function submit() {
+    if (!name.trim()) {
+      setErr("Thiếu tên khách sạn");
+      return;
+    }
     if (!picked) {
       setErr("Thiếu vị trí");
       return;
     }
+    if (!hasRequiredImages) {
+      setErr("Cần đủ 5 ảnh bắt buộc của khách sạn");
+      return;
+    }
+    if (!hasPolicyBasics) {
+      setErr("Thông tin chính sách chưa hợp lệ");
+      return;
+    }
     if (!validPrices.length) {
-      setErr("Thiếu giá");
+      setErr("Cần ít nhất một hạng phòng có tên, giá và số phòng hợp lệ");
       return;
     }
 

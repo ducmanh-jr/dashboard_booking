@@ -3,6 +3,9 @@ import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
 import { logout as logoutApi } from "../../api/authApi";
 import { fetchNotifications } from "../../api/notificationsApi";
 import { PartnerNotification, User } from "../types";
+import { PARTNER_PORTAL_NAME, PARTNER_ROUTE_TITLES } from "../config/pageTitles";
+import { useRoutePageTitle } from "../hooks/usePageTitle";
+import { PortalBrandHeader } from "../components/PortalBrandHeader";
 
 type NavItem = {
   label: string;
@@ -83,6 +86,7 @@ function IconLogout() {
 let cachedNotifications: PartnerNotification[] = [];
 
 export function PartnerLayout({ user, onLogout }: { user: User; onLogout: () => void }) {
+  useRoutePageTitle(PARTNER_PORTAL_NAME, PARTNER_ROUTE_TITLES, "Partner");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [notifications, setNotifications] = useState<PartnerNotification[]>(cachedNotifications);
   const location = useLocation();
@@ -124,6 +128,8 @@ export function PartnerLayout({ user, onLogout }: { user: User; onLogout: () => 
     try {
       await logoutApi();
     } catch {}
+    cachedNotifications = [];
+    setNotifications([]);
     onLogout();
     navigate("/login");
   }
@@ -148,27 +154,7 @@ export function PartnerLayout({ user, onLogout }: { user: User; onLogout: () => 
         )}
       >
         <div className="flex h-full flex-col">
-          <div className="flex h-16 items-center justify-between border-b border-slate-200 px-4">
-            <Link to="/" className="flex min-w-0 items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-black text-primary-foreground">
-                N
-              </div>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-black tracking-tight text-slate-950">NWH Partner</div>
-                <div className="truncate text-[10px] font-bold uppercase text-slate-500">Cổng đối tác</div>
-              </div>
-            </Link>
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-950 lg:hidden"
-              onClick={() => setIsSidebarOpen(false)}
-              aria-label="Đóng menu"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+          <PortalBrandHeader onCloseMobile={() => setIsSidebarOpen(false)} />
 
           <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
             {navItems.map((item) => {
@@ -212,9 +198,13 @@ export function PartnerLayout({ user, onLogout }: { user: User; onLogout: () => 
           <div className="border-t border-slate-200 p-3">
             <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-sm font-black text-primary shadow-sm">
-                  {user.fullName.charAt(0).toUpperCase()}
-                </div>
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover shadow-sm" />
+                ) : (
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-sm font-black text-primary shadow-sm">
+                    {user.fullName.charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <div className="min-w-0">
                   <p className="truncate text-[13px] font-bold text-slate-950">{user.fullName}</p>
                   <p className="truncate text-[11px] text-slate-500">{user.email}</p>
@@ -248,7 +238,7 @@ export function PartnerLayout({ user, onLogout }: { user: User; onLogout: () => 
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="ml-3 text-sm font-black text-slate-950">NWH Partner</span>
+          <span className="ml-3 text-sm font-black text-slate-950">NoWayHome Partner</span>
           {unreadCount > 0 && (
             <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
               {unreadCount > 9 ? "9+" : unreadCount}

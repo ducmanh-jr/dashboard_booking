@@ -121,7 +121,7 @@ export class BookingsService {
       }
 
       // ── STEP 2: Compute total from DailyRate.price (no basePrice) ─────────
-      const totalAmount = rawRates.reduce(
+      const subtotalAmount = rawRates.reduce(
         (sum, r) => sum.plus(r.price),
         new Prisma.Decimal(0),
       );
@@ -132,6 +132,40 @@ export class BookingsService {
         where: { id: { in: lockedIds } },
         data: { availableQty: { decrement: 1 } },
       });
+
+      let discountAmount = new Prisma.Decimal(0);
+      if (dto.voucherId) {
+        const voucher = await tx.voucher.findUnique({
+          where: { id: BigInt(dto.voucherId), isActive: true },
+          include: { promotion: true },
+        });
+        if (voucher) {
+          const now = new Date();
+          if (now >= voucher.promotion.startDate && now <= voucher.promotion.endDate) {
+            if (!voucher.promotion.maxUses || voucher.promotion.totalUsed < voucher.promotion.maxUses) {
+              if (subtotalAmount.greaterThanOrEqualTo(voucher.promotion.minOrderAmount)) {
+                if (voucher.promotion.discountType === 'percent') {
+                  let discount = subtotalAmount.times(voucher.promotion.discountValue).div(100);
+                  if (voucher.promotion.maxDiscount && discount.greaterThan(voucher.promotion.maxDiscount)) {
+                    discount = new Prisma.Decimal(voucher.promotion.maxDiscount);
+                  }
+                  discountAmount = discount;
+                } else {
+                  discountAmount = new Prisma.Decimal(voucher.promotion.discountValue);
+                }
+                
+                await tx.promotion.update({
+                  where: { id: voucher.promotion.id },
+                  data: { totalUsed: { increment: 1 } },
+                });
+              }
+            }
+          }
+        }
+      }
+
+      const taxAmount = new Prisma.Decimal(0);
+      const totalAmount = Prisma.Decimal.max(0, subtotalAmount.plus(taxAmount).minus(discountAmount));
 
       // ── STEP 4: Create Booking ─────────────────────────────────────────────
       return tx.booking.create({
@@ -146,10 +180,13 @@ export class BookingsService {
           numNights,
           numAdults: dto.numAdults,
           numChildren: dto.numChildren,
-          subtotalAmount: totalAmount,
-          taxAmount: new Prisma.Decimal(0),
+          subtotalAmount,
+          discountAmount,
+          taxAmount,
           totalAmount,
+          partnerPayoutAmount: Prisma.Decimal.max(0, subtotalAmount.minus(discountAmount)),
           status: booking_status_enum.pending,
+          voucherId: dto.voucherId ? BigInt(dto.voucherId) : undefined,
         },
       });
     });
@@ -274,32 +311,66 @@ export class BookingsService {
       );
 
       const subtotalAmount = lockedRates.reduce(
-        (sum, rate) => sum.plus(rate.price.times(dto.roomsNeeded)),
-        new Prisma.Decimal(0),
-      );
-      const taxAmount = subtotalAmount.times(TAX_RATE);
-      const totalAmount = subtotalAmount.plus(taxAmount);
+      (sum, rate) => sum.plus(rate.price.times(dto.roomsNeeded)),
+      new Prisma.Decimal(0),
+    );
+    const taxAmount = subtotalAmount.times(TAX_RATE);
 
-      const ratePlanIdForCreate = ratePlan.id;
-      const booking = await tx.booking.create({
-        data: {
-          bookingCode: this.generateBookingCode(),
-          customerId,
-          propertyId,
-          roomTypeId,
-          ratePlanId: ratePlanIdForCreate,
-          checkInDate,
-          checkOutDate,
-          numNights,
-          numAdults: dto.numAdults,
-          numChildren: dto.numChildren,
-          subtotalAmount,
-          taxAmount,
-          totalAmount,
-          partnerPayoutAmount: subtotalAmount,
-          status: booking_status_enum.pending,
-        },
+    let discountAmount = new Prisma.Decimal(0);
+    if (dto.voucherId) {
+      const voucher = await tx.voucher.findUnique({
+        where: { id: BigInt(dto.voucherId), isActive: true },
+        include: { promotion: true },
       });
+      if (voucher) {
+        const now = new Date();
+        if (now >= voucher.promotion.startDate && now <= voucher.promotion.endDate) {
+          if (!voucher.promotion.maxUses || voucher.promotion.totalUsed < voucher.promotion.maxUses) {
+            if (subtotalAmount.greaterThanOrEqualTo(voucher.promotion.minOrderAmount)) {
+              if (voucher.promotion.discountType === 'percent') {
+                let discount = subtotalAmount.times(voucher.promotion.discountValue).div(100);
+                if (voucher.promotion.maxDiscount && discount.greaterThan(voucher.promotion.maxDiscount)) {
+                  discount = new Prisma.Decimal(voucher.promotion.maxDiscount);
+                }
+                discountAmount = discount;
+              } else {
+                discountAmount = new Prisma.Decimal(voucher.promotion.discountValue);
+              }
+              
+              await tx.promotion.update({
+                where: { id: voucher.promotion.id },
+                data: { totalUsed: { increment: 1 } },
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const totalAmount = Prisma.Decimal.max(0, subtotalAmount.plus(taxAmount).minus(discountAmount));
+
+    const ratePlanIdForCreate = ratePlan.id;
+    const booking = await tx.booking.create({
+      data: {
+        bookingCode: this.generateBookingCode(),
+        customerId,
+        propertyId,
+        roomTypeId,
+        ratePlanId: ratePlanIdForCreate,
+        checkInDate,
+        checkOutDate,
+        numNights,
+        numAdults: dto.numAdults,
+        numChildren: dto.numChildren,
+        subtotalAmount,
+        discountAmount,
+        taxAmount,
+        totalAmount,
+        partnerPayoutAmount: Prisma.Decimal.max(0, subtotalAmount.minus(discountAmount)),
+        status: booking_status_enum.pending,
+        voucherId: dto.voucherId ? BigInt(dto.voucherId) : undefined,
+      },
+    });
 
       const averageRoomPrice = subtotalAmount
         .div(dto.roomsNeeded)
@@ -326,6 +397,26 @@ export class BookingsService {
             name: true,
             city: true,
             address: true,
+            media: {
+              select: {
+                url: true,
+                isCover: true,
+              },
+              orderBy: {
+                sortOrder: 'asc',
+              },
+            },
+          },
+        },
+        roomType: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        review: {
+          select: {
+            id: true,
           },
         },
       },
@@ -433,6 +524,43 @@ export class BookingsService {
       status: booking_status_enum.cancelled,
       ...refund,
     };
+  }
+
+  async requestCancel(
+    user: AuthenticatedUser,
+    bookingIdParam: string,
+    reason: string,
+  ): Promise<any> {
+    const bookingId = this.parseBigIntParam(bookingIdParam, 'id');
+    const customerId = BigInt(user.id);
+
+    const booking = await this.prisma.booking.findFirst({
+      where: {
+        id: bookingId,
+        customerId,
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    if (
+      booking.status === booking_status_enum.cancelled ||
+      booking.status === booking_status_enum.checked_out ||
+      booking.status === booking_status_enum.checked_in
+    ) {
+      throw new BadRequestException('Booking cannot be cancelled at this stage');
+    }
+
+    await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        cancellationReason: `PENDING_CANCEL: ${reason}`.trim(),
+      },
+    });
+
+    return { ok: true, status: 'pending_approval' };
   }
 
   async createReview(

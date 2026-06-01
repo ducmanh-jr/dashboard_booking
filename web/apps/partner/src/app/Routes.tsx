@@ -19,7 +19,7 @@ function CreateRoomPage() {
     <RoomEditorForm
       mode="create"
       onDone={(msg) => {
-        navigate("/", { state: { message: msg } });
+        navigate("/rooms", { state: { message: msg } });
       }}
       onCancel={() => navigate("/")}
     />
@@ -53,7 +53,7 @@ function EditRoomPage() {
       mode="edit"
       room={room}
       onDone={(msg) => {
-        navigate("/", { state: { message: msg } });
+        navigate("/rooms", { state: { message: msg } });
       }}
       onCancel={() => navigate("/")}
     />
@@ -76,6 +76,9 @@ interface AppRoutesProps {
 
 export function AppRoutes({ user, onLogin, onLogout }: AppRoutesProps) {
   const navigate = useNavigate();
+  const updateCurrentUser = (patch: Partial<User>) => {
+    if (user) onLogin({ ...user, ...patch });
+  };
 
   return (
     <Routes>
@@ -90,7 +93,7 @@ export function AppRoutes({ user, onLogin, onLogout }: AppRoutesProps) {
         <Route path="/edit/:id" element={<EditRoomPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
-        <Route path="/account" element={<AccountSettingsPage />} />
+        <Route path="/account" element={<AccountSettingsPage onUserUpdated={updateCurrentUser} />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -323,6 +323,39 @@
             }
           },
           {
+            "name": "property_type",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "hotel,resort",
+              "type": "string"
+            }
+          },
+          {
+            "name": "amenities",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "pool,wifi",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort_by",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "lowest_price",
+              "type": "string",
+              "enum": [
+                "best_match",
+                "lowest_price",
+                "highest_price",
+                "highest_rating"
+              ]
+            }
+          },
+          {
             "name": "check_in",
             "required": false,
             "in": "query",
@@ -865,6 +898,36 @@
         ]
       }
     },
+    "/api/bookings/{id}/request-cancel": {
+      "post": {
+        "operationId": "BookingsController_requestCancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "example": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Cancellation request submitted."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Customer requests booking cancellation",
+        "tags": [
+          "Bookings"
+        ]
+      }
+    },
     "/api/bookings/{id}/reviews": {
       "post": {
         "operationId": "BookingsController_createReview",
@@ -1046,6 +1109,20 @@
         "parameters": [],
         "responses": {
           "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compat"
+        ]
+      }
+    },
+    "/api/account/avatar": {
+      "post": {
+        "operationId": "CompatController_uploadAccountAvatar",
+        "parameters": [],
+        "responses": {
+          "201": {
             "description": ""
           }
         },
@@ -1699,6 +1776,75 @@
         ]
       }
     },
+    "/api/admin/bookings/{id}/cancel": {
+      "post": {
+        "operationId": "CompatController_adminCancelBooking",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compat"
+        ]
+      }
+    },
+    "/api/admin/bookings/{id}/mark-paid": {
+      "post": {
+        "operationId": "CompatController_adminMarkBookingPaid",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compat"
+        ]
+      }
+    },
+    "/api/admin/bookings/{id}/reject-cancel": {
+      "post": {
+        "operationId": "CompatController_adminRejectBookingCancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compat"
+        ]
+      }
+    },
     "/api/partner/booking-report": {
       "get": {
         "operationId": "CompatController_partnerBookingReport",
@@ -1826,7 +1972,16 @@
     "/api/notifications/{id}/read": {
       "post": {
         "operationId": "CompatController_markRead",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "201": {
             "description": ""
@@ -1854,7 +2009,16 @@
     "/api/notifications/{id}": {
       "delete": {
         "operationId": "CompatController_deleteNotification",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -2333,6 +2497,45 @@
           "Promotions"
         ]
       }
+    },
+    "/api/vouchers/active": {
+      "get": {
+        "operationId": "VouchersController_getActiveVouchers",
+        "parameters": [
+          {
+            "name": "propertyId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get active vouchers for a property",
+        "tags": [
+          "Vouchers"
+        ]
+      }
+    },
+    "/api/vouchers/apply": {
+      "post": {
+        "operationId": "VouchersController_applyVoucher",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Apply a voucher code",
+        "tags": [
+          "Vouchers"
+        ]
+      }
     }
   },
   "info": {
@@ -2428,7 +2631,6 @@
           "email",
           "password",
           "fullName",
-          "phone",
           "userType"
         ]
       },
@@ -2865,6 +3067,16 @@
             "example": 1,
             "default": 1,
             "description": "Number of rooms needed"
+          },
+          "voucherId": {
+            "type": "number",
+            "example": 1,
+            "description": "Voucher ID to apply discount"
+          },
+          "paymentMethod": {
+            "type": "string",
+            "example": "credit_card",
+            "description": "Payment method selected"
           }
         },
         "required": [

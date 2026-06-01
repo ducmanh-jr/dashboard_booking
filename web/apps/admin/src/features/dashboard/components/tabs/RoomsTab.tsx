@@ -4,6 +4,9 @@ import { fetchRooms, approveRoom, updateRoom, approveRoomRequest, rejectRoomRequ
 import { Room, RoomChangeRequest, Price, NearbyPlace, TransportConnection } from "@/shared/types";
 import { cn } from "@/shared/components/ui";
 import { RoomEditModal } from "../modals/RoomEditModal";
+import { useConfirmDialog } from "../../../../shared/components/ConfirmDialog";
+import { ADMIN_PORTAL_NAME } from "../../../../shared/config/pageTitles";
+import { usePageTitle } from "../../../../shared/hooks/usePageTitle";
 
 function fmtVnd(value: number) {
   return `${value.toLocaleString("vi-VN")} đ`;
@@ -171,7 +174,9 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
   const contentRef = useRef<HTMLDivElement>(null);
 
   const [search, setSearch] = useState("");
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: "asc" | "desc" } | null>(null);
+  usePageTitle({ title: "Khách sạn", entity: detail?.name, portal: ADMIN_PORTAL_NAME, restoreOnUnmount: false });
 
   const filteredList = useMemo(() => {
     let result = [...list];
@@ -273,7 +278,13 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
       alert("Khách sạn đang có yêu cầu đối tác chờ duyệt. Hãy xử lý yêu cầu trước.");
       return;
     }
-    if (!confirm(`Chuyển khách sạn "${room.name}" sang trạng thái ngừng hoạt động?`)) return;
+    const ok = await confirm({
+      title: "Ngừng hoạt động khách sạn",
+      message: `Khách sạn "${room.name}" sẽ chuyển sang trạng thái ngừng hoạt động.`,
+      confirmText: "Ngừng hoạt động",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await deleteRoom(room.id);
       await load();
@@ -749,6 +760,7 @@ export function RoomsTab({ initialFilter = "pending" }: { initialFilter?: string
           }}
         />
       )}
+      {confirmDialog}
     </div>
   );
 }

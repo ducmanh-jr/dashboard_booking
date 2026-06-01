@@ -91,6 +91,18 @@ export class BookingsController {
     return this.bookingsService.cancel(user, id);
   }
 
+  @Post(':id/request-cancel')
+  @ApiOperation({ summary: 'Customer requests booking cancellation' })
+  @ApiParam({ name: 'id', example: 1 })
+  @ApiResponse({ status: 201, description: 'Cancellation request submitted.' })
+  requestCancel(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body('reason') reason?: string,
+  ): Promise<any> {
+    return this.bookingsService.requestCancel(user, id, reason || '');
+  }
+
   @Post(':id/reviews')
   @ApiOperation({ summary: 'Review a checked-out booking' })
   @ApiParam({ name: 'id', example: 1 })

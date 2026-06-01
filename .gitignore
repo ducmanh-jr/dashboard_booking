@@ -4,6 +4,8 @@ build/
 coverage/
 .vite/
 **/.vite/
+uploads/
+**/uploads/
 
 .env
 .env.*
@@ -30,3 +32,4 @@ pnpm-debug.log*
 *.userosscache
 *.sln.docstates
 .vs/
+.understand-anything/.understandignore

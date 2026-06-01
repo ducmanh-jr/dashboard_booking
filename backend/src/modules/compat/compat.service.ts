@@ -25,6 +25,29 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 
 type AnyBody = Record<string, unknown>;
+type NotificationRow = {
+  id: bigint;
+  type: string;
+  channel: string;
+  title: string;
+  body: string | null;
+  data: unknown;
+  entityType: string | null;
+  entityId: bigint | null;
+  isRead: boolean;
+  readAt: Date | null;
+  createdAt: Date;
+};
+type NotificationInput = {
+  userId: bigint;
+  type: string;
+  channel?: string;
+  title: string;
+  body?: string | null;
+  data?: unknown;
+  entityType?: string | null;
+  entityId?: bigint | null;
+};
 type CompatBooking = Prisma.BookingGetPayload<Record<string, never>> & {
   customer?: Prisma.UserGetPayload<Record<string, never>>;
   property?: Prisma.PropertyGetPayload<Record<string, never>>;
@@ -76,7 +99,7 @@ export class CompatService {
     const primaryProperty = dbUser.partnerProfile?.properties[0] ?? null;
     const isPartner = dbUser.userType === user_type_enum.partner;
     const isAdmin = dbUser.userType === user_type_enum.admin;
-    const isSuperAdmin = this.isSuperAdminEmail(dbUser.email);
+    const isSuperAdmin = dbUser.isSuperAdmin;
 
     return {
       profile: {
@@ -149,6 +172,48 @@ export class CompatService {
     return { signature, timestamp, cloudName, apiKey, folder };
   }
 
+  async updateAccountAvatar(user: AuthenticatedUser, file?: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Vui lòng chọn file ảnh đại diện');
+
+    const avatarUrl = `/api/uploads/avatars/${file.filename}`;
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: BigInt(user.id) },
+      select: { avatarUrl: true },
+    });
+    if (!currentUser) {
+      await this.deleteLocalAvatar(avatarUrl);
+      throw new NotFoundException('Khong tim thay tai khoan');
+    }
+
+    let updated;
+    try {
+      updated = await this.prisma.user.update({
+        where: { id: BigInt(user.id) },
+        data: { avatarUrl },
+      });
+    } catch (error) {
+      await this.deleteLocalAvatar(avatarUrl);
+      throw error;
+    }
+
+    await this.deletePreviousAvatar(currentUser.avatarUrl, avatarUrl);
+
+    return {
+      avatarUrl: updated.avatarUrl,
+      user: {
+        id: Number(updated.id),
+        email: updated.email,
+        fullName: updated.fullName,
+        phone: updated.phone,
+        avatarUrl: updated.avatarUrl,
+        role: updated.userType,
+        title: updated.isSuperAdmin ? 'Admin tổng' : updated.userType === user_type_enum.admin ? 'Quản trị viên' : 'Đối tác',
+        isSuperAdmin: updated.isSuperAdmin,
+        status: updated.status,
+      },
+    };
+  }
+
   async updateAccountProfile(user: AuthenticatedUser, body: AnyBody) {
     const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : '';
     const phone = typeof body.phone === 'string' ? body.phone.trim() : undefined;
@@ -188,8 +253,8 @@ export class CompatService {
         phone: updated.phone,
         avatarUrl: updated.avatarUrl,
         role: updated.userType,
-        title: this.isSuperAdminEmail(updated.email) ? 'Admin tổng' : 'Quản trị viên',
-        isSuperAdmin: this.isSuperAdminEmail(updated.email),
+        title: updated.isSuperAdmin ? 'Admin tổng' : 'Quản trị viên',
+        isSuperAdmin: updated.isSuperAdmin,
         status: updated.status,
       },
     };
@@ -277,6 +342,14 @@ export class CompatService {
       await this.upsertRoomTypes(tx, property.id, payload, user.id);
       await this.upsertPolicy(tx, property.id, body);
       await this.saveLegacyData(tx, property.id, body, user.id);
+      await this.notifyAdmins(tx, {
+        type: 'property_review',
+        title: `Khach san cho duyet: ${payload.name}`,
+        body: `${partner.businessName} da gui khach san can duyet.`,
+        entityType: 'property',
+        entityId: property.id,
+        data: { propertyId: Number(property.id), partnerId: Number(partner.id) },
+      });
       return property;
     });
 
@@ -292,6 +365,14 @@ export class CompatService {
     await this.ensurePartnerOwnsProperty(partner.id, propertyId);
     await this.ensurePropertyCanBeChanged(propertyId);
     await this.updateRoomData(propertyId, body, property_status_enum.pending_review, user);
+    await this.notifyAdmins(this.prisma, {
+      type: 'property_update_request',
+      title: 'Yeu cau cap nhat khach san',
+      body: `${partner.businessName} da gui thay doi khach san can duyet.`,
+      entityType: 'property',
+      entityId: propertyId,
+      data: { propertyId: Number(propertyId), partnerId: Number(partner.id) },
+    });
     return { ok: true, message: 'Da cap nhat thong tin khach san' };
   }
 
@@ -327,6 +408,14 @@ export class CompatService {
         reviewerId: null,
       },
     });
+    await this.notifyAdmins(this.prisma, {
+      type: 'property_restore_request',
+      title: 'Yeu cau khoi phuc khach san',
+      body: `${partner.businessName} da gui yeu cau khoi phuc khach san.`,
+      entityType: 'property',
+      entityId: propertyId,
+      data: { propertyId: Number(propertyId), partnerId: Number(partner.id) },
+    });
     return { ok: true, message: 'Da gui yeu cau khoi phuc khach san cho admin duyet' };
   }
 
@@ -351,13 +440,25 @@ export class CompatService {
     id: string,
     status: 'active' | 'rejected',
   ) {
-    await this.prisma.property.update({
+    const property = await this.prisma.property.update({
       where: { id: this.parseId(id, 'Ma khach san khong hop le') },
       data: {
         status,
         reviewerId: this.parseId(user.id, 'Ma nguoi dung khong hop le'),
         reviewedAt: new Date(),
       },
+      include: { partner: true },
+    });
+    await this.createNotification(this.prisma, {
+      userId: property.partner.userId,
+      type: status === 'active' ? 'property_approved' : 'property_rejected',
+      title: status === 'active' ? 'Khach san da duoc duyet' : 'Khach san bi tu choi',
+      body: status === 'active'
+        ? `${property.name} da duoc phe duyet va co the mo ban.`
+        : `${property.name} chua duoc phe duyet. Vui long kiem tra va cap nhat thong tin.`,
+      entityType: 'property',
+      entityId: property.id,
+      data: { propertyId: Number(property.id), status },
     });
     return { ok: true };
   }
@@ -431,13 +532,24 @@ export class CompatService {
           status: { not: user_status_enum.deleted },
         },
       },
-      select: { id: true },
+      select: { id: true, userId: true, businessName: true },
     });
     if (!partner) throw new NotFoundException('Khong tim thay doi tac');
 
     await this.prisma.partnerProfile.update({
       where: { id: partner.id },
       data: { kycStatus: status },
+    });
+    await this.createNotification(this.prisma, {
+      userId: partner.userId,
+      type: status === 'approved' ? 'partner_approved' : 'partner_rejected',
+      title: status === 'approved' ? 'Ho so doi tac da duoc duyet' : 'Ho so doi tac bi tu choi',
+      body: status === 'approved'
+        ? `${partner.businessName} da duoc phe duyet. Ban co the quan ly khach san.`
+        : `${partner.businessName} chua duoc phe duyet. Vui long cap nhat ho so.`,
+      entityType: 'partner',
+      entityId: partner.id,
+      data: { partnerId: Number(partner.id), status },
     });
     return { ok: true };
   }
@@ -525,7 +637,7 @@ export class CompatService {
         id: admin.id,
         email: admin.email,
         fullName: admin.fullName,
-        isSuperAdmin: this.isSuperAdminEmail(admin.email),
+        isSuperAdmin: admin.isSuperAdmin,
         loginMethods: [admin.passwordHash ? 'password' : null, 'google'].filter(Boolean),
         createdAt: admin.createdAt,
       })),
@@ -604,18 +716,27 @@ export class CompatService {
   async adminStats(period: string) {
     const now = new Date();
     const today = this.todayDateKey();
-    const startDate =
-      period === 'week'
-        ? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-        : period === 'year'
-          ? new Date(now.getFullYear(), 0, 1)
-          : new Date(now.getFullYear(), now.getMonth(), 1);
-    const prevStartDate =
-      period === 'week'
-        ? new Date(startDate.getTime() - 7 * 24 * 60 * 60 * 1000)
-        : period === 'year'
-          ? new Date(now.getFullYear() - 1, 0, 1)
-          : new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    let startDate: Date;
+    let prevStartDate: Date;
+
+    if (period === 'week') {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      prevStartDate = new Date(startDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (period === 'year') {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+      prevStartDate = new Date(now.getFullYear(), now.getMonth() - 23, 1);
+    } else {
+      // period === 'month'
+      // Nếu hôm nay là đầu tháng (ngày 1 đến ngày 10), lấy từ ngày 1 của tháng trước
+      if (now.getDate() <= 10) {
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      } else {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+      const durationMs = now.getTime() - startDate.getTime();
+      prevStartDate = new Date(startDate.getTime() - durationMs);
+    }
+
     const [
       pendingPartners,
       pendingRooms,
@@ -692,17 +813,23 @@ export class CompatService {
       }),
       this.prisma.booking.findMany(),
     ]);
+
     const completedBookings = periodBookings.filter((booking) =>
       this.isBookingCompletedForDashboard(booking, today),
     );
     const prevCompletedBookings = prevPeriodBookings.filter((booking) =>
       this.isBookingCompletedForDashboard(booking, today),
     );
-    const activeBookings = allBookings.filter((booking) =>
-      this.isBookingActiveForDashboard(booking, today),
-    ).length;
+    const activeBookings = allBookings.filter((booking) => {
+      const checkIn = this.toDateKey(booking.checkInDate);
+      const checkOut = this.toDateKey(booking.checkOutDate);
+      return (
+        booking.status === 'checked_in' ||
+        (booking.status === 'confirmed' && checkIn <= today && checkOut > today)
+      );
+    }).length;
     const pendingBookings = allBookings.filter((booking) =>
-      booking.status === 'pending' && !this.isBookingCompletedForDashboard(booking, today),
+      booking.status === 'pending',
     ).length;
     const totalRevenue = completedBookings.reduce(
       (sum, booking) => sum + Number(booking.totalAmount),
@@ -735,7 +862,7 @@ export class CompatService {
           city: property.city,
           revenue: rows.reduce((sum, booking) => sum + Number(booking.totalAmount), 0),
           orders: rows.length,
-          commission: rows.reduce((sum, booking) => sum + Number(booking.platformFeeAmount), 0),
+          commission: rows.reduce((sum, booking) => sum + this.bookingPlatformFee(booking), 0),
         };
       })
       .sort((a, b) => b.revenue - a.revenue)
@@ -751,7 +878,7 @@ export class CompatService {
       .slice(0, 5);
     const bookingStats = {
       confirmed: periodStatusBookings.filter((booking) =>
-        this.isBookingCompletedForDashboard(booking, today),
+        ['confirmed', 'checked_in', 'checked_out'].includes(booking.status),
       ).length,
       canceled: periodStatusBookings.filter((booking) => booking.status === 'cancelled')
         .length,
@@ -849,7 +976,111 @@ export class CompatService {
     if (this.isArchivedProperty(booking.property)) {
       throw new BadRequestException('Khach san da ngung hoat dong, chi duoc xem lich su booking');
     }
-    await this.prisma.booking.update({ where: { id: booking.id }, data: { status } });
+    const updateData: Prisma.BookingUpdateInput = { status };
+    if (action === 'check-in' || action === 'check-out') {
+      updateData.paymentStatus = payment_status_enum.paid;
+    }
+    await this.prisma.booking.update({ where: { id: booking.id }, data: updateData });
+    return { ok: true };
+  }
+
+  async adminCancelBooking(id: string) {
+    const bookingId = this.parseId(id, 'Ma booking khong hop le');
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        property: {
+          include: {
+            policy: true,
+          },
+        },
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Khong tim thay dat phong');
+    }
+
+    if (
+      booking.status === booking_status_enum.cancelled ||
+      booking.status === booking_status_enum.checked_out
+    ) {
+      throw new BadRequestException('Booking da bi huy hoac check-out');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          status: booking_status_enum.cancelled,
+          cancelledAt: new Date(),
+          cancellationReason: booking.cancellationReason?.startsWith('PENDING_CANCEL')
+            ? `Yêu cầu hủy được duyệt: ${booking.cancellationReason.replace('PENDING_CANCEL:', '').trim()}`
+            : 'Admin huy don hang',
+        },
+      });
+
+      // Restore availability
+      const inventoryRows = await tx.$queryRaw<Array<{ ratePlanId: bigint; roomsCount: bigint }>>`
+        SELECT
+          rate_plan_id AS "ratePlanId",
+          COUNT(*)::bigint AS "roomsCount"
+        FROM booking_rooms
+        WHERE booking_id = ${booking.id}
+        GROUP BY rate_plan_id
+      `;
+
+      for (const inventoryRow of inventoryRows) {
+        await tx.dailyRate.updateMany({
+          where: {
+            ratePlanId: inventoryRow.ratePlanId,
+            date: {
+              gte: booking.checkInDate,
+              lt: booking.checkOutDate,
+            },
+          },
+          data: {
+            availableQty: {
+              increment: Number(inventoryRow.roomsCount),
+            },
+          },
+        });
+      }
+    });
+
+    return { ok: true };
+  }
+
+  async adminMarkBookingPaid(id: string) {
+    const bookingId = this.parseId(id, 'Ma booking khong hop le');
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+    });
+    if (!booking) throw new NotFoundException('Khong tim thay dat phong');
+    await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        paymentStatus: payment_status_enum.paid,
+        status: booking_status_enum.confirmed,
+      },
+    });
+    return { ok: true };
+  }
+
+  async adminRejectBookingCancel(id: string) {
+    const bookingId = this.parseId(id, 'Ma booking khong hop le');
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+    });
+    if (!booking) throw new NotFoundException('Khong tim thay dat phong');
+    await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        cancellationReason: booking.cancellationReason?.startsWith('PENDING_CANCEL')
+          ? `Từ chối hủy: ${booking.cancellationReason.replace('PENDING_CANCEL:', '').trim()}`
+          : null,
+      },
+    });
     return { ok: true };
   }
 
@@ -1123,47 +1354,70 @@ export class CompatService {
   }
 
   async notifications(user: AuthenticatedUser) {
-    const rows = await this.legacyRows('notifications');
-    const visibleRows = rows.filter((row) => String(row.user_id ?? '') === user.id);
-    const syntheticRows = await this.syntheticNotifications(user);
+    const rows = await this.prisma.$queryRaw<NotificationRow[]>`
+      SELECT
+        id,
+        type,
+        channel,
+        title,
+        body,
+        data,
+        entity_type AS "entityType",
+        entity_id AS "entityId",
+        is_read AS "isRead",
+        read_at AS "readAt",
+        created_at AS "createdAt"
+      FROM notifications
+      WHERE user_id = ${this.parseId(user.id, 'Ma nguoi dung khong hop le')}
+      ORDER BY created_at DESC, id DESC
+    `;
     return {
-      notifications: [
-        ...syntheticRows,
-        ...visibleRows.map((row) => ({
-          id: row.id,
-          type: row.type,
-          channel: row.channel,
-          title: row.title,
-          body: row.body,
-          data: row.data,
-          entityType: row.entity_type,
-          entityId: row.entity_id,
-          isRead: Boolean(Number(row.is_read ?? 0)),
-          readAt: row.read_at,
-          createdAt: row.created_at,
-        })),
-      ],
+      notifications: rows.map((row) => this.mapNotificationRow(row)),
     };
   }
 
   async unreadCount(user: AuthenticatedUser) {
-    const rows = await this.legacyRows('notifications');
-    const syntheticRows = await this.syntheticNotifications(user);
+    const rows = await this.prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*)::bigint AS count
+      FROM notifications
+      WHERE user_id = ${this.parseId(user.id, 'Ma nguoi dung khong hop le')}
+        AND is_read = FALSE
+    `;
     return {
-      count: rows.filter((row) => String(row.user_id ?? '') === user.id && !Number(row.is_read ?? 0)).length
-        + syntheticRows.filter((row) => !row.isRead).length,
+      count: Number(rows[0]?.count ?? 0),
     };
   }
 
-  async markNotificationRead() {
+  async markNotificationRead(user: AuthenticatedUser, id: string) {
+    const notificationId = this.parseId(id, 'Ma thong bao khong hop le');
+    await this.prisma.$executeRaw`
+      UPDATE notifications
+      SET is_read = TRUE,
+          read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+      WHERE id = ${notificationId}
+        AND user_id = ${this.parseId(user.id, 'Ma nguoi dung khong hop le')}
+    `;
     return { ok: true };
   }
 
-  async markAllNotificationsRead() {
+  async markAllNotificationsRead(user: AuthenticatedUser) {
+    await this.prisma.$executeRaw`
+      UPDATE notifications
+      SET is_read = TRUE,
+          read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+      WHERE user_id = ${this.parseId(user.id, 'Ma nguoi dung khong hop le')}
+        AND is_read = FALSE
+    `;
     return { ok: true };
   }
 
-  async deleteNotification() {
+  async deleteNotification(user: AuthenticatedUser, id: string) {
+    const notificationId = this.parseId(id, 'Ma thong bao khong hop le');
+    await this.prisma.$executeRaw`
+      DELETE FROM notifications
+      WHERE id = ${notificationId}
+        AND user_id = ${this.parseId(user.id, 'Ma nguoi dung khong hop le')}
+    `;
     return { ok: true };
   }
 
@@ -1177,64 +1431,109 @@ export class CompatService {
 
   private isSuperAdminEmail(email: string): boolean {
     const normalized = email.trim().toLowerCase();
-    const emails = (this.configService.get<string>('SUPER_ADMIN_EMAILS') ?? 'nguyenducmanh.ovaltine@gmail.com')
+    const emails = (this.configService.get<string>('SUPER_ADMIN_EMAILS') ?? '')
       .split(',')
       .map((item) => item.trim().toLowerCase())
       .filter(Boolean);
     return emails.includes(normalized);
   }
 
-  private async syntheticNotifications(user: AuthenticatedUser) {
-    if (user.userType !== user_type_enum.admin) return [];
-    const [pendingPartners, pendingProperties] = await Promise.all([
-      this.prisma.partnerProfile.findMany({
-        where: {
-          kycStatus: kyc_status_enum.pending,
-          user: {
-            deletedAt: null,
-            status: { not: user_status_enum.deleted },
-          },
-        },
-        include: { user: true },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      }),
-      this.prisma.property.findMany({
-        where: { status: property_status_enum.pending_review, deletedAt: null },
-        include: { partner: { include: { user: true } } },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      }),
-    ]);
+  private async isSuperAdminUser(user: AuthenticatedUser): Promise<boolean> {
+    if (user.isSuperAdmin) return true;
 
-    return [
-      ...pendingPartners.map((partner) => ({
-        id: 7_000_000 + Number(partner.id),
-        type: 'new_partner_registration',
-        channel: 'system',
-        title: `Đối tác chờ duyệt: ${partner.businessName}`,
-        body: `${partner.user.fullName} (${partner.user.email}) đang chờ xét duyệt hồ sơ.`,
-        data: null,
-        entityType: 'partner',
-        entityId: Number(partner.userId),
-        isRead: false,
-        readAt: null,
-        createdAt: partner.createdAt,
-      })),
-      ...pendingProperties.map((property) => ({
-        id: 8_000_000 + Number(property.id),
-        type: 'property_review',
-        channel: 'system',
-        title: `Khách sạn chờ duyệt: ${property.name}`,
-        body: `${property.partner.businessName} (${property.partner.user.email}) đã gửi khách sạn cần duyệt.`,
-        data: null,
-        entityType: 'property',
-        entityId: Number(property.id),
-        isRead: false,
-        readAt: null,
-        createdAt: property.createdAt,
-      })),
-    ];
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: BigInt(user.id) },
+      select: { id: true, email: true, isSuperAdmin: true },
+    });
+
+    if (!dbUser) return false;
+    if (dbUser.isSuperAdmin) return true;
+
+    if (this.isSuperAdminEmail(dbUser.email)) {
+      await this.prisma.user.update({
+        where: { id: dbUser.id },
+        data: { isSuperAdmin: true },
+      });
+      return true;
+    }
+
+    return false;
+  }
+
+  private parsePositiveAmount(value: unknown, label = 'So tien'): number {
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException(`${label} phai la so duong`);
+    }
+    return Math.round(amount);
+  }
+
+  private parseTransactionType(value: unknown): 'DEPOSIT' | 'WITHDRAW' {
+    if (value === 'DEPOSIT' || value === 'WITHDRAW') return value;
+    throw new BadRequestException('Loai giao dich khong hop le');
+  }
+
+  private mapNotificationRow(row: NotificationRow) {
+    return {
+      id: Number(row.id),
+      type: row.type,
+      channel: row.channel,
+      title: row.title,
+      body: row.body,
+      data: row.data,
+      entityType: row.entityType,
+      entityId: row.entityId === null ? null : Number(row.entityId),
+      isRead: row.isRead,
+      readAt: row.readAt,
+      createdAt: row.createdAt,
+    };
+  }
+
+  private async notifyAdmins(
+    db: Prisma.TransactionClient | PrismaService,
+    notification: Omit<NotificationInput, 'userId'>,
+  ) {
+    const admins = await db.user.findMany({
+      where: {
+        userType: user_type_enum.admin,
+        deletedAt: null,
+        status: { not: user_status_enum.deleted },
+      },
+      select: { id: true },
+    });
+
+    for (const admin of admins) {
+      await this.createNotification(db, { ...notification, userId: admin.id });
+    }
+  }
+
+  private async createNotification(
+    db: Prisma.TransactionClient | PrismaService,
+    notification: NotificationInput,
+  ) {
+    const dataJson = JSON.stringify(notification.data ?? {});
+    await db.$executeRaw`
+      INSERT INTO notifications (
+        user_id,
+        type,
+        channel,
+        title,
+        body,
+        data,
+        entity_type,
+        entity_id
+      )
+      VALUES (
+        ${notification.userId},
+        ${notification.type},
+        ${notification.channel ?? 'in_app'},
+        ${notification.title},
+        ${notification.body ?? null},
+        ${dataJson}::jsonb,
+        ${notification.entityType ?? null},
+        ${notification.entityId ?? null}
+      )
+    `;
   }
 
   private async legacyRows(sourceTable: string): Promise<AnyBody[]> {
@@ -1458,6 +1757,46 @@ export class CompatService {
       `;
     }
 
+    // Update main properties table columns for sync
+    const formattedTransport = transport.map(item => {
+      if (typeof item === 'string') {
+        const [name, distance] = item.split(':').map((part) => part.trim());
+        return { name, distance: distance || '' };
+      }
+      if (item && typeof item === 'object') {
+        return {
+          name: String(item.name || ''),
+          distance: String(item.distance || ''),
+        };
+      }
+      return null;
+    }).filter(Boolean);
+
+    const formattedNearby = nearbyPlaces.map(place => {
+      const name = place.name;
+      if (!name) return null;
+      
+      const distanceM = Number(place.distanceM ?? place.distance_m ?? 0);
+      const distanceText = distanceM >= 1000 ? `${(distanceM / 1000).toFixed(1)}km` : `${distanceM}m`;
+      
+      return {
+        name,
+        type: place.category || place.type || 'poi',
+        distanceM,
+        distance: distanceText,
+        lat: Number(place.latitude ?? place.lat ?? 0),
+        lon: Number(place.longitude ?? place.lon ?? 0),
+      };
+    }).filter(Boolean);
+
+    await tx.property.update({
+      where: { id: propertyId },
+      data: {
+        transportConnections: formattedTransport,
+        nearbyPlaces: formattedNearby,
+      },
+    });
+
     // 3. Save property amenities
     await tx.propertyAmenity.deleteMany({
       where: { propertyId },
@@ -1524,27 +1863,64 @@ export class CompatService {
 
   private normalizeRoomPayload(body: AnyBody) {
     const prices = Array.isArray(body.prices) ? (body.prices as AnyBody[]) : [];
-    const firstPrice = prices[0] ?? {};
+    if (!prices.length) {
+      throw new BadRequestException('Can it nhat mot hang phong hop le');
+    }
     const roomTypeText = this.text(body.roomType, '');
-    return {
-      name: this.text(body.name, 'Khach san moi'),
-      description: typeof body.description === 'string' ? body.description : null,
-      address: this.text(body.address, ''),
-      city: this.text(body.city, ''),
-      latitude: Number(body.latitude ?? 10.7769),
-      longitude: Number(body.longitude ?? 106.7009),
-      propertyType: this.propertyTypeFromText(roomTypeText),
-      starRating: this.starFromText(roomTypeText),
-      prices: (prices.length ? prices : [firstPrice]).map((price, index) => ({
-        label: this.text(price.label, `Phong ${index + 1}`),
-        pricePerNight: Number(price.pricePerNight ?? 0),
-        totalInventory: Number(price.totalInventory ?? 1),
-        area: this.optionalNumber(price.area),
-        capacity: Number(price.capacity ?? body.capacity ?? 2),
+    const name = this.text(body.name, '').trim();
+    const address = this.text(body.address, '').trim();
+    const city = this.text(body.city, '').trim();
+    const latitude = Number(body.latitude);
+    const longitude = Number(body.longitude);
+    if (!name) throw new BadRequestException('Ten khach san la bat buoc');
+    if (!address) throw new BadRequestException('Dia chi khach san la bat buoc');
+    if (!city) throw new BadRequestException('Thanh pho la bat buoc');
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+      throw new BadRequestException('Vi do khong hop le');
+    }
+    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      throw new BadRequestException('Kinh do khong hop le');
+    }
+    const normalizedPrices = prices.map((price, index) => {
+      const label = this.text(price.label, '').trim();
+      const pricePerNight = Number(price.pricePerNight);
+      const totalInventory = Number(price.totalInventory ?? 1);
+      const capacity = Number(price.capacity ?? body.capacity ?? 2);
+      const area = this.optionalNumber(price.area);
+      if (!label) throw new BadRequestException(`Ten hang phong #${index + 1} la bat buoc`);
+      if (!Number.isFinite(pricePerNight) || pricePerNight <= 0) {
+        throw new BadRequestException(`Gia hang phong #${index + 1} khong hop le`);
+      }
+      if (!Number.isInteger(totalInventory) || totalInventory <= 0) {
+        throw new BadRequestException(`So phong phuc vu/ngay cua hang phong #${index + 1} khong hop le`);
+      }
+      if (!Number.isInteger(capacity) || capacity <= 0) {
+        throw new BadRequestException(`Suc chua hang phong #${index + 1} khong hop le`);
+      }
+      if (area !== null && (!Number.isFinite(area) || area <= 0)) {
+        throw new BadRequestException(`Dien tich hang phong #${index + 1} khong hop le`);
+      }
+      return {
+        label,
+        pricePerNight,
+        totalInventory,
+        area,
+        capacity,
         bedInfo: typeof price.bedInfo === 'string' ? price.bedInfo : null,
         imageUrls: Array.isArray(price.imageUrls) ? price.imageUrls.map(u => String(u).trim()).filter(Boolean) : [],
         amenities: typeof price.amenities === 'string' ? price.amenities : '',
-      })),
+      };
+    });
+    return {
+      name,
+      description: typeof body.description === 'string' ? body.description : null,
+      address,
+      city,
+      latitude,
+      longitude,
+      propertyType: this.propertyTypeFromText(roomTypeText),
+      starRating: this.starFromText(roomTypeText),
+      prices: normalizedPrices,
       policy: {
         refundable: ((body.policy as AnyBody | undefined)?.refundable ?? true) as boolean,
       },
@@ -1763,7 +2139,7 @@ export class CompatService {
     const isCurrentStay =
       !isCancelled &&
       (booking.status === 'checked_in' ||
-        (booking.status === 'confirmed' && checkIn <= today && checkOut > today));
+        (['pending', 'confirmed'].includes(booking.status) && checkIn <= today && checkOut > today));
     // Khách đang checked_in chưa phải là "completed" dù đã qua ngày checkout
     const isCompleted =
       !isCancelled &&
@@ -1796,10 +2172,11 @@ export class CompatService {
       status: booking.status,
       paymentStatus: booking.paymentStatus,
       total: Number(booking.totalAmount),
-      platformFee: Number(booking.platformFeeAmount),
+      platformFee: this.bookingPlatformFee(booking),
       partnerPayout: Number(booking.partnerPayoutAmount),
       createdAt: booking.createdAt,
       specialRequests: booking.specialRequests ?? '',
+      cancellationReason: booking.cancellationReason ?? null,
       isCompleted,
       isCurrentStay,
       isFutureStay,
@@ -1812,8 +2189,20 @@ export class CompatService {
   ) {
     return (
       booking.status !== 'cancelled' &&
+      booking.status !== 'no_show' &&
+      booking.status !== 'checked_in' &&
       (booking.status === 'checked_out' || this.toDateKey(booking.checkOutDate) <= today)
     );
+  }
+
+  private bookingPlatformFee(
+    booking: Pick<CompatBooking, 'platformFeeAmount' | 'partnerPayoutAmount' | 'totalAmount'>,
+  ) {
+    const storedFee = Number(booking.platformFeeAmount);
+    if (storedFee > 0) return storedFee;
+
+    const inferredFee = Number(booking.totalAmount) - Number(booking.partnerPayoutAmount);
+    return inferredFee > 0 ? inferredFee : 0;
   }
 
   private isBookingActiveForDashboard(
@@ -2089,7 +2478,7 @@ export class CompatService {
 
         if (isCompleted) {
           const totalAmount = Number(booking.totalAmount);
-          const platformFeeAmount = Number(booking.platformFeeAmount);
+          const platformFeeAmount = this.bookingPlatformFee(booking);
           const partnerPayoutAmount = Number(booking.partnerPayoutAmount);
 
           if (booking.paymentStatus === 'paid') {
@@ -2208,7 +2597,7 @@ export class CompatService {
 
         if (isCompleted) {
           const totalAmount = Number(booking.totalAmount);
-          const platformFeeAmount = Number(booking.platformFeeAmount);
+          const platformFeeAmount = this.bookingPlatformFee(booking);
           const partnerPayoutAmount = Number(booking.partnerPayoutAmount);
 
           if (booking.paymentStatus === 'paid') {
@@ -2299,7 +2688,7 @@ export class CompatService {
             (booking.status === 'checked_out' || checkOut <= today);
 
           if (isCompleted) {
-            const platformFeeAmount = Number(booking.platformFeeAmount);
+            const platformFeeAmount = this.bookingPlatformFee(booking);
             const partnerPayoutAmount = Number(booking.partnerPayoutAmount);
 
             if (booking.paymentStatus === 'paid') {
@@ -2362,7 +2751,7 @@ export class CompatService {
 
         if (isCompleted) {
           const totalAmount = Number(booking.totalAmount);
-          const platformFeeAmount = Number(booking.platformFeeAmount);
+          const platformFeeAmount = this.bookingPlatformFee(booking);
           const partnerPayoutAmount = Number(booking.partnerPayoutAmount);
 
           platformFeeRevenue += platformFeeAmount;
@@ -2437,6 +2826,23 @@ export class CompatService {
     const initialBalance = Number(systemInfo.initialBalance || 1125230);
     const systemDepositsAndWithdrawals = systemInfo.depositsAndWithdrawals || [];
     const paidTaxes = systemInfo.paidTaxes || [];
+    const systemBankAccountNumber = '110011011102';
+    const systemBankName = 'Vietcombank';
+    const openingBalanceTransaction =
+      initialBalance > 0
+        ? {
+            id: 'SYS-OPENING-BALANCE',
+            type: 'DEPOSIT',
+            amount: initialBalance,
+            targetBank: systemBankName,
+            targetAccount: systemBankAccountNumber,
+            targetHolder: 'Admin tổng',
+            status: 'SUCCESS',
+            createdAt: systemInfo.initialBalanceCreatedAt || '2026-03-01T00:00:00.000Z',
+            description: 'Nạp số dư ban đầu',
+            isOpeningBalance: true,
+          }
+        : null;
 
     let systemDepositsSum = 0;
     let systemWithdrawalsSum = 0;
@@ -2473,7 +2879,7 @@ export class CompatService {
           (booking.status === 'checked_out' || checkOut <= today);
 
         if (isCompleted) {
-          const platformFeeAmount = Number(booking.platformFeeAmount);
+          const platformFeeAmount = this.bookingPlatformFee(booking);
           const monthKey = booking.createdAt.toISOString().slice(0, 7);
           monthlyCommissions[monthKey] = (monthlyCommissions[monthKey] || 0) + platformFeeAmount;
         }
@@ -2508,12 +2914,14 @@ export class CompatService {
       transactions,
       partners,
       system: {
-        bankAccountNumber: '110011011102',
-        bankName: 'Vietcombank',
+        bankAccountNumber: systemBankAccountNumber,
+        bankName: systemBankName,
         initialBalance,
         platformFeeRevenue,
         balance: systemBalance,
-        depositsAndWithdrawals: systemDepositsAndWithdrawals,
+        depositsAndWithdrawals: openingBalanceTransaction
+          ? [openingBalanceTransaction, ...systemDepositsAndWithdrawals]
+          : systemDepositsAndWithdrawals,
         paidTaxes,
         monthlyTaxes,
       },
@@ -2521,10 +2929,12 @@ export class CompatService {
   }
 
   async addSystemTransaction(user: AuthenticatedUser, body: Record<string, unknown>) {
-    const isSuperAdmin = this.isSuperAdminEmail(user.email);
+    const isSuperAdmin = await this.isSuperAdminUser(user);
     if (!isSuperAdmin) {
       throw new ForbiddenException('Chi co admin tong moi duoc phep thao tac nap/rut tai khoan he thong');
     }
+    const type = this.parseTransactionType(body.type);
+    const amount = this.parsePositiveAmount(body.amount);
 
     const db = this.readPayDb();
     if (!db.system) {
@@ -2533,8 +2943,8 @@ export class CompatService {
 
     const newTx = {
       id: `SYS-TX-${Math.floor(100000 + Math.random() * 900000)}`,
-      type: body.type,
-      amount: Number(body.amount),
+      type,
+      amount,
       targetBank: body.targetBank || 'Vietcombank',
       targetAccount: body.targetAccount || '110011011102',
       targetHolder: body.targetHolder || 'Company Account',
@@ -2548,7 +2958,7 @@ export class CompatService {
   }
 
   async paySystemTax(user: AuthenticatedUser, body: Record<string, unknown>) {
-    const isSuperAdmin = this.isSuperAdminEmail(user.email);
+    const isSuperAdmin = await this.isSuperAdminUser(user);
     if (!isSuperAdmin) {
       throw new ForbiddenException('Chi co admin tong moi duoc phep dong thue');
     }
@@ -2559,7 +2969,7 @@ export class CompatService {
     }
 
     const month = body.month as string;
-    const amount = Number(body.amount);
+    const amount = this.parsePositiveAmount(body.amount, 'So tien thue');
 
     const existing = db.system.paidTaxes.find((t: any) => t.month === month);
     if (existing) {
@@ -2578,6 +2988,10 @@ export class CompatService {
   }
 
   async addPartnerTransaction(user: AuthenticatedUser, body: Record<string, unknown>) {
+    const isSuperAdmin = await this.isSuperAdminUser(user);
+    if (!isSuperAdmin) {
+      throw new ForbiddenException('Chi co admin tong moi duoc phep nap/rut vi doi tac');
+    }
     const db = this.readPayDb();
     const partnerIdStr = body.partnerId as string;
     
@@ -2589,10 +3003,13 @@ export class CompatService {
       db.partners[partnerIdStr].partnerDepositsAndWithdrawals = [];
     }
 
+    const type = this.parseTransactionType(body.type);
+    const amount = this.parsePositiveAmount(body.amount);
+
     const newTx = {
       id: `PART-TX-${Math.floor(100000 + Math.random() * 900000)}`,
-      type: body.type,
-      amount: Number(body.amount),
+      type,
+      amount,
       status: 'SUCCESS',
       createdAt: new Date().toISOString(),
     };
@@ -2614,11 +3031,19 @@ export class CompatService {
     if (!db.partners[partnerIdStr].partnerDepositsAndWithdrawals) {
       db.partners[partnerIdStr].partnerDepositsAndWithdrawals = [];
     }
+    const type = this.parseTransactionType(body.type);
+    const amount = this.parsePositiveAmount(body.amount);
+    if (type === 'WITHDRAW') {
+      const status = await this.getNowayhomePayStatus(user);
+      if (amount > Number(status.walletBalance || 0)) {
+        throw new BadRequestException('So du vi khong du de rut tien');
+      }
+    }
 
     const newTx = {
       id: `PART-TX-${Math.floor(100000 + Math.random() * 900000)}`,
-      type: body.type,
-      amount: Number(body.amount),
+      type,
+      amount,
       status: 'SUCCESS',
       createdAt: new Date().toISOString(),
     };
@@ -2626,5 +3051,48 @@ export class CompatService {
     db.partners[partnerIdStr].partnerDepositsAndWithdrawals.push(newTx);
     this.writePayDb(db);
     return { success: true, transaction: newTx };
+  }
+
+  private async deletePreviousAvatar(previousUrl?: string | null, nextUrl?: string | null) {
+    if (!previousUrl || previousUrl === nextUrl) return;
+    await this.deleteLocalAvatar(previousUrl);
+    await this.deleteCloudinaryAvatar(previousUrl);
+  }
+
+  private async deleteLocalAvatar(avatarUrl?: string | null) {
+    if (!avatarUrl?.startsWith('/api/uploads/avatars/')) return;
+
+    const avatarsDirectory = path.resolve(process.cwd(), 'uploads', 'avatars');
+    const fileName = path.basename(avatarUrl);
+    const filePath = path.resolve(avatarsDirectory, fileName);
+    if (!filePath.startsWith(`${avatarsDirectory}${path.sep}`)) return;
+
+    await fs.promises.unlink(filePath).catch(() => undefined);
+  }
+
+  private async deleteCloudinaryAvatar(avatarUrl?: string | null) {
+    if (!avatarUrl || !avatarUrl.includes('/nowayhome/avatars/')) return;
+
+    const cloudName = this.configService.get<string>('CLOUDINARY_CLOUD_NAME') ?? '';
+    const apiKey = this.configService.get<string>('CLOUDINARY_API_KEY') ?? '';
+    const apiSecret = this.configService.get<string>('CLOUDINARY_API_SECRET') ?? '';
+    if (!cloudName || !apiKey || !apiSecret) return;
+
+    const publicId = this.extractCloudinaryPublicId(avatarUrl);
+    if (!publicId) return;
+
+    cloudinary.config({ cloud_name: cloudName, api_key: apiKey, api_secret: apiSecret });
+    await cloudinary.uploader.destroy(publicId, { resource_type: 'image' }).catch(() => undefined);
+  }
+
+  private extractCloudinaryPublicId(avatarUrl: string) {
+    const uploadMarker = '/upload/';
+    const uploadIndex = avatarUrl.indexOf(uploadMarker);
+    if (uploadIndex === -1) return null;
+
+    let publicPath = avatarUrl.slice(uploadIndex + uploadMarker.length).split(/[?#]/)[0];
+    publicPath = publicPath.replace(/^v\d+\//, '');
+    const extension = path.extname(publicPath);
+    return extension ? publicPath.slice(0, -extension.length) : publicPath;
   }
 }

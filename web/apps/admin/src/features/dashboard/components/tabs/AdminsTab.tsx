@@ -2,6 +2,7 @@ import { useEffect, useReducer } from "react";
 import { fetchAdmins, createAdmin, createGoogleAdmin, deleteAdmin, updateAdmin } from "../../../../api/adminsApi";
 import { Card, CardHeader, CardTitle, CardContent, Button, cn } from "../../../../shared/components/ui";
 import { UserPlus, Edit2, Trash2, ShieldCheck, Mail, User, KeyRound } from "lucide-react";
+import { useConfirmDialog } from "../../../../shared/components/ConfirmDialog";
 
 type Admin = { id: number; email: string; fullName: string; createdAt: string; isSuperAdmin?: boolean; loginMethods?: string[] };
 
@@ -69,6 +70,7 @@ function reducer(state: State, action: Action): State {
 
 export function AdminsTab({ currentUserId, isSuperAdmin }: { currentUserId: number; isSuperAdmin: boolean }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const load = async () => {
     try {
@@ -133,7 +135,13 @@ export function AdminsTab({ currentUserId, isSuperAdmin }: { currentUserId: numb
   };
 
   const handleRemove = async (id: number) => {
-    if (!confirm("Xóa quản trị viên này?")) return;
+    const ok = await confirm({
+      title: "Xóa quản trị viên",
+      message: "Tài khoản quản trị viên này sẽ không còn quyền truy cập hệ thống.",
+      confirmText: "Xóa",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await deleteAdmin(id);
       await load();
@@ -317,6 +325,7 @@ export function AdminsTab({ currentUserId, isSuperAdmin }: { currentUserId: numb
           onSave={handleSaveEdit}
         />
       )}
+      {confirmDialog}
     </div>
   );
 }

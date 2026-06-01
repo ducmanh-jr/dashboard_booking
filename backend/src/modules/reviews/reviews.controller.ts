@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, Get } from '@nestjs/common';
+import { Body, Controller, Param, Post, Get, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -13,6 +13,7 @@ import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { CreateReviewBodyDto } from './dto/create-review-body.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { ReviewsService } from './reviews.service';
+import { FilesInterceptor } from '@nestjs/platform-express';
 
 @ApiTags('Reviews')
 @ApiBearerAuth()
@@ -22,6 +23,7 @@ export class ReviewsController {
 
   @Roles(Role.CUSTOMER)
   @Post()
+  @UseInterceptors(FilesInterceptor('files'))
   @ApiOperation({
     summary: 'Submit a post-stay review for a completed booking',
   })
@@ -33,9 +35,16 @@ export class ReviewsController {
   createReview(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateReviewBodyDto,
+    @UploadedFiles() files?: Express.Multer.File[],
   ) {
     // Re-use the existing service method but map DTO fields.
     const { bookingId, ...reviewData } = dto;
+    if (files && files.length > 0) {
+      console.log(`[Review Upload] Received ${files.length} images for booking #${bookingId}:`);
+      files.forEach((file, index) => {
+        console.log(`  File ${index + 1}: name=${file.originalname}, mime=${file.mimetype}, size=${file.size}`);
+      });
+    }
     return this.reviewsService.createReview(user, bookingId, reviewData);
   }
 

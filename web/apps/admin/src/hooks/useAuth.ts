@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchMe, logout as logoutApi } from "../api/authApi";
-import { fetchNotifications } from "../api/notificationsApi";
-import { API_PATHS } from "../constants/apiPaths";
+import { fetchUnreadCount } from "../api/notificationsApi";
 import { User } from "../shared/types";
 
 export const useAuth = () => {
@@ -13,11 +12,8 @@ export const useAuth = () => {
 
   const loadUnread = async () => {
     try {
-      const result = await fetchNotifications();
-      // In admin result.count might not be there directly, but we can check if we want to add a specific count API
-      // For now let's assume result has count or we just use length if it returns a list
-      // Wait, admin notificationsApi has fetchNotifications which returns { notifications: [...] }
-      setUnreadCount(result.notifications?.filter((n: any) => !n.isRead).length || 0);
+      const result = await fetchUnreadCount();
+      setUnreadCount(Number(result.count || 0));
     } catch {}
   };
 
@@ -55,9 +51,11 @@ export const useAuth = () => {
       navigate("/login");
     };
     window.addEventListener("nowayhome:auth-error", handleAuthError);
+    window.addEventListener("nowayhome:user-updated", check);
     return () => {
       clearInterval(timer);
       window.removeEventListener("nowayhome:auth-error", handleAuthError);
+      window.removeEventListener("nowayhome:user-updated", check);
     };
   }, []);
 

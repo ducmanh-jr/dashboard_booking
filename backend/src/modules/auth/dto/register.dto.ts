@@ -26,11 +26,11 @@ export class RegisterDto {
   @MaxLength(255)
   fullName!: string;
 
-  @ApiProperty({ example: '+84901234567' })
+  @ApiProperty({ example: '+84901234567', required: false })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(20)
-  phone!: string;
+  phone?: string;
 
   @ApiProperty({
     enum: user_type_enum,

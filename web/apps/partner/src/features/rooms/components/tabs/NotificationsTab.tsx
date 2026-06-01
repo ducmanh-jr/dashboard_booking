@@ -30,16 +30,19 @@ let cachedNotificationList: PartnerNotification[] | null = null;
 export function NotificationsTab() {
   const [list, setList] = useState<PartnerNotification[]>(cachedNotificationList || []);
   const [loading, setLoading] = useState(!cachedNotificationList);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   async function load() {
     setLoading(list.length === 0);
+    setError("");
     try {
       const result = await fetchNotifications();
       const nextList = result.notifications || [];
       cachedNotificationList = nextList;
       setList(nextList);
-    } catch {
+    } catch (err: any) {
+      setError(err.message || "Không thể tải thông báo.");
     } finally {
       setLoading(false);
     }
@@ -62,7 +65,9 @@ export function NotificationsTab() {
       await markAsRead(id);
       updateList((items) => items.map((item) => item.id === id ? { ...item, isRead: true } : item));
       window.dispatchEvent(new CustomEvent("notifications-action", { detail: { type: 'read', id } }));
-    } catch {}
+    } catch (err: any) {
+      setError(err.message || "Không thể đánh dấu đã đọc.");
+    }
   }
 
   async function remove(id: number) {
@@ -70,7 +75,9 @@ export function NotificationsTab() {
       await deleteNotification(id);
       updateList((items) => items.filter((item) => item.id !== id));
       window.dispatchEvent(new CustomEvent("notifications-action", { detail: { type: 'remove', id } }));
-    } catch {}
+    } catch (err: any) {
+      setError(err.message || "Không thể xóa thông báo.");
+    }
   }
 
   async function markReadAll() {
@@ -78,12 +85,20 @@ export function NotificationsTab() {
       await markReadAllApi();
       updateList((items) => items.map((item) => ({ ...item, isRead: true })));
       window.dispatchEvent(new CustomEvent("notifications-action", { detail: { type: 'read-all' } }));
-    } catch {}
+    } catch (err: any) {
+      setError(err.message || "Không thể đánh dấu tất cả đã đọc.");
+    }
   }
 
   function handleClick(item: PartnerNotification) {
     if (!item.isRead) markRead(item.id);
-    navigate("/");
+    if (item.entityType === "property" || item.type.includes("property")) {
+      navigate("/rooms", { state: { targetId: item.entityId, highlight: true } });
+    } else if (item.entityType === "booking" || item.type.includes("booking")) {
+      navigate("/bookings", { state: { targetId: item.entityId, highlight: true } });
+    } else {
+      navigate("/");
+    }
   }
 
   if (loading && list.length === 0) {
@@ -112,6 +127,12 @@ export function NotificationsTab() {
           </button>
         )}
       </div>
+
+      {error && (
+        <div className="rounded-md border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {error}
+        </div>
+      )}
 
       {list.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white px-6 py-12 text-center">

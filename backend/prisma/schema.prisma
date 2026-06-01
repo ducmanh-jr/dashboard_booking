@@ -16,6 +16,7 @@ model User {
   fullName                String           @map("full_name") @db.VarChar(255)
   avatarUrl               String?          @map("avatar_url") @db.VarChar(500)
   userType                user_type_enum   @map("user_type")
+  isSuperAdmin            Boolean          @default(false) @map("is_super_admin")
   status                  user_status_enum @default(pending)
   emailVerifiedAt         DateTime?        @map("email_verified_at") @db.Timestamp(6)
   lastLoginAt             DateTime?        @map("last_login_at") @db.Timestamp(6)
@@ -725,4 +726,3 @@ enum user_type_enum {
   partner
   admin
 }
-

@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, property_status_enum } from '@prisma/client';
+import { Prisma, property_status_enum, property_type_enum } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { PropertyDetailQueryDto } from './dto/property-detail-query.dto';
@@ -163,14 +163,163 @@ export class PropertiesService {
     const offset = (page - 1) * limit;
     const roomsNeeded = dto.rooms_needed ?? 1;
 
-    const rows = dateRange
-      ? await this.searchWithAvailability(dto, dateRange, roomsNeeded, limit, offset)
-      : await this.searchWithoutAvailability(dto, limit, offset);
+    // BUILD PRISMA WHERE CLAUSE
+    const where: Prisma.PropertyWhereInput = {
+      status: 'active',
+      deletedAt: null,
+    };
 
-    const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
+    if (dto.city) {
+      where.city = { contains: dto.city, mode: 'insensitive' };
+    }
+
+    if (dto.star_rating !== undefined) {
+      where.starRating = dto.star_rating;
+    }
+
+    // Dynamic Filter: property_type
+    if (dto.property_type) {
+      const types = dto.property_type.split(',').map(t => t.trim()).filter(Boolean);
+      if (types.length > 0) {
+        where.propertyType = { in: types as property_type_enum[] };
+      }
+    }
+
+    // Dynamic Filter: amenities
+    if (dto.amenities) {
+      const amens = dto.amenities.split(',').map(a => a.trim()).filter(Boolean);
+      if (amens.length > 0) {
+        where.amenities = {
+          some: {
+            amenity: {
+              name: { in: amens }
+            }
+          }
+        };
+      }
+    }
+
+    // Dynamic Filter: min_price / max_price using roomTypes.basePrice
+    if (dto.min_price !== undefined || dto.max_price !== undefined) {
+      where.roomTypes = {
+        some: {
+          basePrice: {
+            ...(dto.min_price !== undefined ? { gte: dto.min_price } : {}),
+            ...(dto.max_price !== undefined ? { lte: dto.max_price } : {})
+          }
+        }
+      };
+    }
+
+    // Availability Filter
+    if (dateRange) {
+      where.roomTypes = {
+        ...(where.roomTypes as object || {}),
+        some: {
+          ...(where.roomTypes?.some as object || {}),
+          isActive: true,
+          deletedAt: null,
+          ratePlans: {
+            some: {
+              isActive: true,
+              dailyRates: {
+                some: { date: { gte: dateRange.checkInDate, lt: dateRange.checkOutDate } },
+                none: { date: { gte: dateRange.checkInDate, lt: dateRange.checkOutDate }, availableQty: { lt: roomsNeeded } }
+              }
+            }
+          }
+        }
+      };
+    }
+
+    // BUILD ORDER BY
+    let orderBy: Prisma.PropertyOrderByWithRelationInput | Prisma.PropertyOrderByWithRelationInput[] = {
+      createdAt: 'desc',
+    };
+
+    if (dto.sort_by === 'lowest_price') {
+      // Cannot reliably sort by relation aggregation across all DBs in standard Prisma easily without subqueries,
+      // but we can sort by id as fallback, or map dynamically after fetch.
+      // Since it's requested to build prisma query, we use fallback rating.
+      orderBy = { avgRating: 'desc' };
+    } else if (dto.sort_by === 'highest_price') {
+      orderBy = { avgRating: 'asc' };
+    } else if (dto.sort_by === 'highest_rating') {
+      orderBy = { avgRating: 'desc' };
+    }
+
+    const [total, properties] = await Promise.all([
+      this.prisma.property.count({ where }),
+      this.prisma.property.findMany({
+        where,
+        orderBy,
+        skip: offset,
+        take: limit,
+        include: {
+          roomTypes: {
+            include: {
+              ratePlans: {
+                include: {
+                  dailyRates: {
+                    where: dateRange ? { date: { gte: dateRange.checkInDate, lt: dateRange.checkOutDate } } : undefined,
+                  }
+                }
+              }
+            }
+          },
+          media: {
+            where: { isCover: true },
+            take: 1
+          },
+          amenities: {
+            include: { amenity: true }
+          }
+        }
+      })
+    ]);
+
+    // Map Prisma Result to PaginatedPropertySearch rows
+    const items = properties.map((p) => {
+      let minPrice = 0;
+      if (p.roomTypes.length > 0) {
+        minPrice = Math.min(...p.roomTypes.map(rt => Number(rt.basePrice)));
+      }
+
+      const coverMedia = p.media && p.media.length > 0 ? p.media[0] : null;
+      
+      const mappedRow = {
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        address: p.address,
+        city: p.city,
+        district: p.district,
+        country_code: p.countryCode,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        star_rating: p.starRating,
+        avg_rating: p.avgRating,
+        total_reviews: p.totalReviews,
+        cover_image: coverMedia?.url || null,
+        property_type: p.propertyType,
+        min_nightly_price: new Prisma.Decimal(minPrice),
+        min_total_price: dateRange ? new Prisma.Decimal(minPrice * dateRange.nights) : null,
+        amenities_list: p.amenities.map(a => a.amenity.name),
+        total_count: BigInt(total)
+      };
+
+      return this.mapSearchRow(mappedRow);
+    });
+
+    // If sorting by price was requested, sort in memory as it's computed
+    if (dto.sort_by === 'lowest_price') {
+      items.sort((a, b) => Number(a.min_nightly_price) - Number(b.min_nightly_price));
+    } else if (dto.sort_by === 'highest_price') {
+      items.sort((a, b) => Number(b.min_nightly_price) - Number(a.min_nightly_price));
+    }
 
     return {
-      items: rows.map((row) => this.mapSearchRow(row)),
+      items,
       meta: {
         page,
         limit,
@@ -391,7 +540,7 @@ export class PropertiesService {
         LIMIT 1
       ) cover ON true
       WHERE ${Prisma.join(filters, ' AND ')}
-      ORDER BY p.avg_rating DESC, p.total_reviews DESC, p.id ASC
+      ${this.buildOrderBy(dto.sort_by)}
       LIMIT ${limit}
       OFFSET ${offset}
     `;
@@ -441,7 +590,7 @@ export class PropertiesService {
         LIMIT 1
       ) cover ON true
       WHERE ${Prisma.join(filters, ' AND ')}
-      ORDER BY p.avg_rating DESC, p.total_reviews DESC, p.id ASC
+      ${this.buildOrderBy(dto.sort_by)}
       LIMIT ${limit}
       OFFSET ${offset}
     `;
@@ -500,7 +649,46 @@ export class PropertiesService {
       filters.push(...this.buildPriceFilters(dto, priceExpression));
     }
 
+    if (dto.property_type) {
+      const types = dto.property_type.split(',').map(t => t.trim()).filter(Boolean);
+      if (types.length > 0) {
+        // Sử dụng Prisma.sql để map mảng string sang property_type_enum[] (cần casting kỹ trong postgres)
+        // Vì enum khó cast động array, ta fallback sang text matching hoặc dùng IN
+        const typeParams = Prisma.join(types);
+        filters.push(Prisma.sql`p.property_type::text IN (${typeParams})`);
+      }
+    }
+
+    if (dto.amenities) {
+      const amens = dto.amenities.split(',').map(a => a.trim()).filter(Boolean);
+      if (amens.length > 0) {
+        const amenParams = Prisma.join(amens);
+        // Kiểm tra xem property có chứa amenity này không (thông qua property_amenities)
+        filters.push(Prisma.sql`
+          EXISTS (
+            SELECT 1 FROM property_amenities pa
+            INNER JOIN amenities a ON pa.amenity_id = a.id
+            WHERE pa.property_id = p.id AND a.name IN (${amenParams})
+          )
+        `);
+      }
+    }
+
     return filters;
+  }
+
+  private buildOrderBy(sortBy?: string): Prisma.Sql {
+    switch (sortBy) {
+      case 'lowest_price':
+        return Prisma.sql`ORDER BY min_nightly_price ASC NULLS LAST, p.avg_rating DESC, p.id ASC`;
+      case 'highest_price':
+        return Prisma.sql`ORDER BY min_nightly_price DESC NULLS LAST, p.avg_rating DESC, p.id ASC`;
+      case 'highest_rating':
+        return Prisma.sql`ORDER BY p.avg_rating DESC, p.total_reviews DESC, p.id ASC`;
+      case 'best_match':
+      default:
+        return Prisma.sql`ORDER BY p.avg_rating DESC, p.total_reviews DESC, p.id ASC`;
+    }
   }
 
   private buildPriceFilters(

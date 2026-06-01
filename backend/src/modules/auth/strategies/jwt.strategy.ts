@@ -11,6 +11,7 @@ export interface AuthenticatedUser {
   id: string;
   email: string;
   userType: user_type_enum;
+  isSuperAdmin?: boolean;
 }
 
 @Injectable()
@@ -69,6 +70,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: payload.sub,
       email: payload.email,
       userType: payload.userType,
+      isSuperAdmin: payload.isSuperAdmin,
     };
   }
 }
