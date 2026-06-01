@@ -497,7 +497,15 @@ export class CompatService {
         status: { not: user_status_enum.deleted },
       },
     };
-    if (status && status !== 'all') where.kycStatus = status as kyc_status_enum;
+
+    // Filter by user account lock status (suspended)
+    if (status === 'suspended') {
+      where.user = { deletedAt: null, status: user_status_enum.suspended };
+    } else if (status && status !== 'all') {
+      // Filter by kycStatus (pending, approved, rejected)
+      where.kycStatus = status as kyc_status_enum;
+    }
+
     const partners = await this.prisma.partnerProfile.findMany({
       where,
       include: {
@@ -514,6 +522,7 @@ export class CompatService {
         phone: partner.user.phone ?? '',
         hotelName: partner.businessName,
         status: partner.kycStatus,
+        userStatus: partner.user.status,
         rejectReason: '',
         createdAt: partner.createdAt,
         reviewedAt: partner.kycReviewedAt,
@@ -532,24 +541,150 @@ export class CompatService {
           status: { not: user_status_enum.deleted },
         },
       },
-      select: { id: true, userId: true, businessName: true },
+      select: { id: true, userId: true, businessName: true, user: { select: { email: true } } },
     });
     if (!partner) throw new NotFoundException('Khong tim thay doi tac');
 
+    if (status === 'rejected') {
+      // Khi từ chối: thêm email vào blacklist 1 ngày
+      const originalEmail = partner.user.email;
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // +1 ngày
+
+      await this.prisma.$transaction([
+        // Thêm vào blacklist
+        this.prisma.partnerBlacklist.upsert({
+          where: { email: originalEmail },
+          create: { email: originalEmail, expiresAt },
+          update: { rejectedAt: new Date(), expiresAt },
+        }),
+        // Cập nhật kycStatus
+        this.prisma.partnerProfile.update({
+          where: { id: partner.id },
+          data: { kycStatus: kyc_status_enum.rejected },
+        }),
+      ]);
+
+      // Gửi notification cho đối tác bị từ chối
+      await this.createNotification(this.prisma, {
+        userId: partner.userId,
+        type: 'partner_rejected',
+        title: 'Hồ sơ đối tác bị từ chối',
+        body: 'Yêu cầu đăng ký đối tác của bạn đã bị từ chối. Vui lòng liên hệ hỗ trợ hoặc thử lại sau 24 giờ.',
+      });
+
+      return { ok: true };
+    }
+
+    // status === 'approved'
     await this.prisma.partnerProfile.update({
       where: { id: partner.id },
       data: { kycStatus: status },
     });
     await this.createNotification(this.prisma, {
       userId: partner.userId,
-      type: status === 'approved' ? 'partner_approved' : 'partner_rejected',
-      title: status === 'approved' ? 'Ho so doi tac da duoc duyet' : 'Ho so doi tac bi tu choi',
-      body: status === 'approved'
-        ? `${partner.businessName} da duoc phe duyet. Ban co the quan ly khach san.`
-        : `${partner.businessName} chua duoc phe duyet. Vui long cap nhat ho so.`,
+      type: 'partner_approved',
+      title: 'Ho so doi tac da duoc duyet',
+      body: `${partner.businessName} da duoc phe duyet. Ban co the quan ly khach san.`,
       entityType: 'partner',
       entityId: partner.id,
       data: { partnerId: Number(partner.id), status },
+    });
+    return { ok: true };
+  }
+
+  async lockPartner(userId: string) {
+    const id = this.parseId(userId, 'Ma doi tac khong hop le');
+    const partner = await this.prisma.partnerProfile.findFirst({
+      where: {
+        userId: id,
+        user: { deletedAt: null, status: { not: user_status_enum.deleted } },
+      },
+      select: { id: true, userId: true, businessName: true },
+    });
+    if (!partner) throw new NotFoundException('Khong tim thay doi tac');
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { status: user_status_enum.suspended },
+    });
+    await this.createNotification(this.prisma, {
+      userId: partner.userId,
+      type: 'partner_locked',
+      title: 'Tai khoan bi khoa',
+      body: `Tai khoan doi tac ${partner.businessName} da bi quan tri vien khoa. Vui long lien he de biet them chi tiet.`,
+      entityType: 'partner',
+      entityId: partner.id,
+      data: { partnerId: Number(partner.id), status: 'suspended' },
+    });
+    return { ok: true };
+  }
+
+  async unlockPartner(userId: string) {
+    const id = this.parseId(userId, 'Ma doi tac khong hop le');
+    const partner = await this.prisma.partnerProfile.findFirst({
+      where: {
+        userId: id,
+        user: { deletedAt: null, status: { not: user_status_enum.deleted } },
+      },
+      select: { id: true, userId: true, businessName: true },
+    });
+    if (!partner) throw new NotFoundException('Khong tim thay doi tac');
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { status: user_status_enum.active },
+    });
+    await this.createNotification(this.prisma, {
+      userId: partner.userId,
+      type: 'partner_unlocked',
+      title: 'Tai khoan da duoc mo khoa',
+      body: `Tai khoan doi tac ${partner.businessName} da duoc quan tri vien mo khoa. Ban co the dang nhap lai.`,
+      entityType: 'partner',
+      entityId: partner.id,
+      data: { partnerId: Number(partner.id), status: 'active' },
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Hủy quyền đối tác: hạ userType về customer, giữ nguyên tài khoản.
+   * Khác với deleteUser (xóa hẳn tài khoản) và rejectPartner (từ chối đơn KYC).
+   */
+  async revokePartner(userId: string) {
+    const id = this.parseId(userId, 'Ma doi tac khong hop le');
+    const partner = await this.prisma.partnerProfile.findFirst({
+      where: {
+        userId: id,
+        user: {
+          deletedAt: null,
+          status: { not: user_status_enum.deleted },
+        },
+      },
+      select: { id: true, userId: true, businessName: true },
+    });
+    if (!partner) throw new NotFoundException('Khong tim thay doi tac');
+
+    await this.prisma.$transaction([
+      // Hạ userType về customer
+      this.prisma.user.update({
+        where: { id },
+        data: { userType: user_type_enum.customer },
+      }),
+      // Đánh dấu KYC là rejected để tránh nhầm lẫn
+      this.prisma.partnerProfile.update({
+        where: { id: partner.id },
+        data: { kycStatus: kyc_status_enum.rejected },
+      }),
+    ]);
+
+    await this.createNotification(this.prisma, {
+      userId: partner.userId,
+      type: 'partner_rejected',
+      title: 'Quyen doi tac da bi thu hoi',
+      body: `Quyen doi tac cua ${partner.businessName} da bi thu hoi boi quan tri vien.`,
+      entityType: 'partner',
+      entityId: partner.id,
+      data: { partnerId: Number(partner.id), status: 'revoked' },
     });
     return { ok: true };
   }

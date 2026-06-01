@@ -10,6 +10,8 @@ const apiClient = axios.create({
   timeout: 10000, // Timeout 10s để tránh app bị treo
 });
 
+let refreshPromise: Promise<string> | null = null;
+
 // Interceptor: Nhét JWT Token vào Header
 apiClient.interceptors.request.use(async (config) => {
   const token = await SecureStore.getItemAsync("access_token");
@@ -22,12 +24,42 @@ apiClient.interceptors.request.use(async (config) => {
 // Interceptor: Chuẩn hóa lỗi từ NestJS
 apiClient.interceptors.response.use(
   (response) => response.data,
-  (error) => {
+  async (error) => {
     const res = error.response;
+    const originalRequest = error.config;
     
-    if (res?.status === 401) {
+    if (
+      res?.status === 401 &&
+      !originalRequest?._retry &&
+      !originalRequest?.url?.includes("/auth/refresh")
+    ) {
+      const refreshToken = await SecureStore.getItemAsync("refresh_token");
+      if (refreshToken) {
+        originalRequest._retry = true;
+        try {
+          refreshPromise ??= apiClient
+            .post("/auth/refresh", { refreshToken })
+            .then(async (tokens: any) => {
+              await SecureStore.setItemAsync("access_token", tokens.accessToken);
+              if (tokens.refreshToken) {
+                await SecureStore.setItemAsync("refresh_token", tokens.refreshToken);
+              }
+              return tokens.accessToken;
+            })
+            .finally(() => {
+              refreshPromise = null;
+            });
+
+          const accessToken = await refreshPromise;
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          return apiClient(originalRequest);
+        } catch (refreshError) {
+          await SecureStore.deleteItemAsync("access_token");
+          await SecureStore.deleteItemAsync("refresh_token");
+        }
+      }
+
       console.warn("[API Error]: Token hết hạn hoặc Unauthorized. Tự động đăng xuất...");
-      // Xóa token khỏi máy an toàn bằng secure store, và dùng require chống vòng lặp
       try {
         const { useAuthStore } = require('../store/useAuthStore');
         useAuthStore.getState().logout();

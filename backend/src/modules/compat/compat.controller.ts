@@ -319,6 +319,28 @@ export class CompatController {
     return this.compatService.setPartnerStatus(id, 'rejected');
   }
 
+  /**
+   * Hủy quyền đối tác: hạ về customer, KHÔNG xóa tài khoản.
+   * Dùng khi admin muốn thu hồi quyền đối tác của một tài khoản đã được duyệt.
+   */
+  @Roles(Role.ADMIN)
+  @Post('admin/partners/:id/revoke')
+  revokePartner(@Param('id') id: string) {
+    return this.compatService.revokePartner(id);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post('admin/partners/:id/lock')
+  lockPartner(@Param('id') id: string) {
+    return this.compatService.lockPartner(id);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post('admin/partners/:id/unlock')
+  unlockPartner(@Param('id') id: string) {
+    return this.compatService.unlockPartner(id);
+  }
+
   @Roles(Role.ADMIN)
   @Delete('admin/partners/:id')
   deletePartner(@Param('id') id: string) {

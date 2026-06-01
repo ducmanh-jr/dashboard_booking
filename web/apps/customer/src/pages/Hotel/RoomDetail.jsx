@@ -15,6 +15,7 @@ import {
   X, Camera, Plane, Train, Compass, DollarSign, ShoppingCart
 } from 'lucide-react';
 import { hotelService } from '../../services/hotelService';
+import { reviewService } from '../../services/reviewService';
 
 // === Bảng ánh xạ tên tiện nghi → icon tương ứng ===
 // Dùng để hiển thị icon phù hợp bên cạnh tên tiện nghi (Hồ bơi, Wifi, Spa...)
@@ -54,6 +55,7 @@ const RoomDetail = () => {
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [showLoginPopup, setShowLoginPopup] = useState(false);
+  const [serverReviews, setServerReviews] = useState([]);
 
   // === Lấy thông tin ngày nhận/trả phòng từ URL ===
   const startParam = searchParams.get('startDate');
@@ -121,6 +123,7 @@ const RoomDetail = () => {
 
           const mapped = {
             id: raw.slug,
+            propertyId: raw.id?.toString(),
             name: raw.name,
             slug: raw.slug,
             type: raw.propertyType === 'hotel' || raw.property_type === 'hotel'
@@ -165,6 +168,7 @@ const RoomDetail = () => {
             roomTypes: raw.roomTypes?.length > 0
               ? raw.roomTypes.map(rt => ({
                 id: rt.id?.toString() || String(Math.random()),
+                ratePlanId: rt.ratePlans?.[0]?.id?.toString(),
                 name: rt.name,
                 description: rt.description || '',
                 price: Number(rt.total_price || rt.basePrice || 0),
@@ -243,6 +247,46 @@ const RoomDetail = () => {
     };
   }, [id, startParam, endParam]);
 
+  useEffect(() => {
+    let active = true;
+
+    const fetchReviews = async () => {
+      if (!hotel?.propertyId) {
+        setServerReviews([]);
+        return;
+      }
+
+      try {
+        const response = await reviewService.getByProperty(hotel.propertyId);
+        const rawReviews = response.data?.data || response.data || [];
+        if (!active) return;
+
+        setServerReviews(rawReviews.map((review) => ({
+          id: review.id?.toString(),
+          userName: review.customer?.fullName || 'Khách ẩn danh',
+          userAvatar: review.customer?.avatarUrl,
+          rating: Number(review.overallRating || review.rating || 0),
+          date: review.createdAt
+            ? new Date(review.createdAt).toLocaleDateString('vi-VN')
+            : '',
+          comment: review.content || review.comment || '',
+          roomName: review.booking?.roomType?.name || 'Phòng đã lưu trú',
+          images: [],
+        })));
+      } catch (err) {
+        console.error('Không thể tải đánh giá từ server:', err);
+        if (active) {
+          setServerReviews([]);
+        }
+      }
+    };
+
+    fetchReviews();
+    return () => {
+      active = false;
+    };
+  }, [hotel?.propertyId]);
+
   // === Tính số đêm lưu trú ===
   // Nếu có ngày hợp lệ → tính chênh lệch, nếu không → mặc định 1 đêm
   const nights = (startDate && endDate && endDate > startDate)
@@ -282,81 +326,7 @@ const RoomDetail = () => {
     );
   }
 
-  // Lấy danh sách đánh giá từ localStorage (đáp ứng hình ảnh, số sao, bình luận)
-  const getHotelReviews = (hotelId, hotelName) => {
-    const toSlug = (str) => {
-      if (!str) return 'hotel';
-      return str
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[đĐ]/g, 'd')
-        .replace(/([^0-9a-z-\s])/g, '')
-        .replace(/(\s+)/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-+|-+$/g, '');
-    };
-
-    const key = `reviews_${hotelId}`;
-    const fallbackKey = `reviews_${toSlug(hotelName)}`;
-
-    let stored = localStorage.getItem(key);
-    if (!stored) {
-      stored = localStorage.getItem(fallbackKey);
-    }
-
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    // Khởi tạo đánh giá mẫu nếu chưa có
-    const mockReviews = [
-      {
-        id: 1,
-        userName: "Nguyễn Minh Tâm",
-        userAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=Tam&hair=shortCombover`,
-        rating: 5,
-        date: "14/05/2026",
-        comment: "Khách sạn cực kỳ đẹp, phòng rộng rãi và sạch sẽ ngoài mong đợi. Nhân viên lễ tân nhiệt tình hướng dẫn các điểm đi chơi xung quanh. Buffet sáng ngon và đa dạng món ăn. Nhất định sẽ quay lại lần sau!",
-        roomName: "Studio Tiêu Chuẩn (Standard Studio)",
-        images: [
-          "https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=600&q=80",
-          "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=600&q=80"
-        ]
-      },
-      {
-        id: 2,
-        userName: "Trần Thị Thu Thảo",
-        userAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=Thao&hair=long`,
-        rating: 4,
-        date: "28/04/2026",
-        comment: "Vị trí vô cùng đắc địa, ngay trung tâm nên di chuyển rất tiện. Phòng view hồ bơi siêu chill, chụp ảnh sống ảo góc nào cũng đẹp. Chỉ có điểm trừ nhỏ là cách âm chưa thực sự xuất sắc lắm vào ban ngày, nhưng ban đêm thì rất yên tĩnh.",
-        roomName: "Phòng Deluxe Hướng Biển",
-        images: [
-          "https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=600&q=80"
-        ]
-      },
-      {
-        id: 3,
-        userName: "David Pham",
-        userAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=David`,
-        rating: 5,
-        date: "08/04/2026",
-        comment: "Very good experience! Modern room designs and high class amenities. The infinity pool is amazing. Highly recommended for couples.",
-        roomName: "Phòng Suite Thượng Hạng",
-        images: []
-      }
-    ];
-    localStorage.setItem(key, JSON.stringify(mockReviews));
-    localStorage.setItem(fallbackKey, JSON.stringify(mockReviews));
-    return mockReviews;
-  };
-
-  const reviewsList = getHotelReviews(hotel.id, hotel.name);
+  const reviewsList = serverReviews;
   const totalReviewsCount = reviewsList.length;
   const averageRating = totalReviewsCount > 0
     ? (reviewsList.reduce((acc, r) => acc + r.rating, 0) / totalReviewsCount).toFixed(1)

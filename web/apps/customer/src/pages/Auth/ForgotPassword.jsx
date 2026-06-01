@@ -7,18 +7,21 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { User, Bell } from 'lucide-react';
 import { useToast, ToastContainer } from '../../components/common/Toast';
+import { authService } from '../../services/authService';
 
 const ForgotPassword = () => {
   // State quản lý bước hiện tại (1: nhập email, 2: đặt lại mật khẩu)
   const [step, setStep] = useState(1);
   const [identifier, setIdentifier] = useState('');
+  const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toasts, removeToast, toast } = useToast();
 
   // Xử lý gửi yêu cầu khôi phục (bước 1 → chuyển sang bước 2)
-  const handleSendRequest = (e) => {
+  const handleSendRequest = async (e) => {
     e.preventDefault();
     const newErrors = {};
     if (!identifier.trim()) {
@@ -38,19 +41,38 @@ const ForgotPassword = () => {
     
     // Nếu không có lỗi thì chuyển sang bước 2
     if (Object.keys(newErrors).length === 0) {
-      setStep(2);
+      setIsSubmitting(true);
+      try {
+        const response = await authService.forgotPassword(identifier.trim());
+        const data = response.data?.data || response.data;
+        if (data?.otp) {
+          toast.success(`Mã OTP dev: ${data.otp}`, 'Đã tạo mã khôi phục');
+        } else {
+          toast.success('Nếu email tồn tại, mã khôi phục đã được gửi.', 'Đã gửi yêu cầu');
+        }
+        setStep(2);
+      } catch (error) {
+        const message = error.response?.data?.message || error.message || 'Không thể gửi yêu cầu khôi phục.';
+        toast.error(Array.isArray(message) ? message[0] : message, 'Thất bại');
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
   // Xử lý cập nhật mật khẩu mới (bước 2)
-  const handleUpdatePassword = (e) => {
+  const handleUpdatePassword = async (e) => {
     e.preventDefault();
     const newErrors = {};
     
+    if (!otp.trim()) {
+      newErrors.otp = 'Vui lòng nhập mã OTP';
+    }
+
     if (!password.trim()) {
       newErrors.password = 'Vui lòng nhập mật khẩu mới';
-    } else if (password.length < 6) {
-      newErrors.password = 'Mật khẩu phải có ít nhất 6 ký tự';
+    } else if (password.length < 8) {
+      newErrors.password = 'Mật khẩu phải có ít nhất 8 ký tự';
     }
 
     if (!confirmPassword.trim()) {
@@ -62,8 +84,16 @@ const ForgotPassword = () => {
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
-      toast.success('Cập nhật mật khẩu thành công! Vui lòng đăng nhập lại.', 'Thành công');
-      // Có thể dùng navigate('/login') để chuyển về đăng nhập
+      setIsSubmitting(true);
+      try {
+        await authService.resetPassword(identifier.trim(), otp.trim(), password);
+        toast.success('Cập nhật mật khẩu thành công! Vui lòng đăng nhập lại.', 'Thành công');
+      } catch (error) {
+        const message = error.response?.data?.message || error.message || 'Không thể cập nhật mật khẩu.';
+        toast.error(Array.isArray(message) ? message[0] : message, 'Thất bại');
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -126,9 +156,10 @@ const ForgotPassword = () => {
               {/* Nút gửi yêu cầu khôi phục */}
               <button
                 type="submit"
-                className="w-full bg-[#403B69] hover:bg-[#2d2a4a] text-white py-3.5 font-semibold transition-colors mb-6"
+                disabled={isSubmitting}
+                className="w-full bg-[#403B69] hover:bg-[#2d2a4a] text-white py-3.5 font-semibold transition-colors mb-6 disabled:opacity-60"
               >
-                Gửi yêu cầu
+                {isSubmitting ? 'Đang gửi...' : 'Gửi yêu cầu'}
               </button>
 
               {/* Link quay lại trang đăng nhập */}
@@ -144,6 +175,22 @@ const ForgotPassword = () => {
           ) : (
             /* === BƯỚC 2: Nhập mật khẩu mới và xác nhận === */
             <form onSubmit={handleUpdatePassword} className="px-4 md:px-12">
+              <div className="mb-8">
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
+                  Mã OTP
+                </label>
+                <input
+                  type="text"
+                  value={otp}
+                  onChange={(e) => {
+                    setOtp(e.target.value);
+                    if (errors.otp) setErrors({ ...errors, otp: '' });
+                  }}
+                  className={`w-full border-b py-3 text-gray-900 focus:outline-none transition-colors ${errors.otp ? 'border-red-500' : 'border-gray-400 focus:border-black'}`}
+                />
+                {errors.otp && <p className="text-red-500 text-xs mt-1">{errors.otp}</p>}
+              </div>
+
               {/* Ô nhập mật khẩu mới */}
               <div className="mb-8">
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
@@ -181,9 +228,10 @@ const ForgotPassword = () => {
               {/* Nút cập nhật mật khẩu */}
               <button
                 type="submit"
-                className="w-full bg-[#403B69] hover:bg-[#2d2a4a] text-white py-3.5 font-semibold transition-colors"
+                disabled={isSubmitting}
+                className="w-full bg-[#403B69] hover:bg-[#2d2a4a] text-white py-3.5 font-semibold transition-colors disabled:opacity-60"
               >
-                Cập nhật
+                {isSubmitting ? 'Đang cập nhật...' : 'Cập nhật'}
               </button>
             </form>
           )}

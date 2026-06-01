@@ -27,11 +27,32 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
     try {
       if (mode === "login") {
         const result = await login({ email: form.email, password: form.password });
-        if (result.user?.role !== "partner") throw new Error("Tai khoan nay khong phai doi tac");
-        onLogin(result.user);
+        const role = result.user?.role;
+
+        if (role === "partner") {
+          // Đã là partner → vào dashboard
+          onLogin(result.user);
+        } else if (role === "admin") {
+          throw new Error("Tài khoản admin không thể đăng nhập vào trang đối tác.");
+        } else {
+          // role === "customer" → tài khoản tồn tại nhưng chưa/không còn là partner
+          // Hiện form apply partner (giống flow Google login)
+          setGoogleUser(result.user);
+        }
       } else {
-        await registerPartner(form);
-        setPending({ email: form.email, hotelName: form.hotelName });
+        // mode === "register"
+        try {
+          await registerPartner(form);
+          setPending({ email: form.email, hotelName: form.hotelName });
+        } catch (regError: any) {
+          const msg: string = regError.message ?? "";
+          if (msg.toLowerCase().includes("already exists") || msg.toLowerCase().includes("conflict")) {
+            // Email đã tồn tại → hướng dẫn đăng nhập rồi apply
+            setErr("Email này đã có tài khoản. Vui lòng đăng nhập bằng email & mật khẩu hoặc Google để tiếp tục đăng ký làm đối tác.");
+          } else {
+            setErr(msg);
+          }
+        }
       }
     } catch (error: any) {
       setErr(error.message);

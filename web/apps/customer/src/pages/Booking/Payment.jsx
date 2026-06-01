@@ -7,19 +7,18 @@ import { useToast, ToastContainer } from '../../components/common/Toast';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import {
   User, Bell, CreditCard, Wallet, Landmark,
-  X, CheckCircle, Calendar, Users, ShieldCheck,
-  ChevronRight, MapPin, Ticket, Home, Clock
+  Calendar, Users, ShieldCheck,
+  MapPin, Ticket, Home, Clock
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useBooking } from '../../context/BookingContext';
 import qrCodeImg from '../../assets/images/qr-code.png';
 import ETicketModal from '../../components/booking/ETicketModal';
+import { bookingService } from '../../services/bookingService';
 
 const Payment = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { addBooking } = useBooking();
   const { toasts, removeToast, toast } = useToast();
 
   useEffect(() => {
@@ -76,6 +75,7 @@ const Payment = () => {
   const [ticketStatus, setTicketStatus] = useState('success');
   // State lưu thông tin đơn hàng vừa tạo thành công
   const [newOrder, setNewOrder] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // === Tính toán chi phí ===
   const serviceFee = 1200000;  // Phí dịch vụ cố định
@@ -106,8 +106,16 @@ const Payment = () => {
     return price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " đ";
   };
 
+  const toDateOnly = (date) => {
+    if (!date) return '';
+    const parsed = new Date(date);
+    return parsed.toISOString().slice(0, 10);
+  };
+
+  const unwrapResponse = (response) => response.data?.data || response.data;
+
   // Xử lý xác nhận thanh toán: Kiểm tra validation rồi hiển thị modal thành công
-  const handleConfirmPayment = () => {
+  const handleConfirmPayment = async () => {
     const newErrors = {};
 
     // 1. Kiểm tra không được để trống
@@ -155,19 +163,58 @@ const Payment = () => {
 
     setErrors(newErrors);
 
-    if (Object.keys(newErrors).length === 0) {
-      // Lưu vào BookingContext
-      const createdBooking = addBooking({
+    if (Object.keys(newErrors).length > 0) {
+      toast.error('Vui lòng kiểm tra lại thông tin thanh toán!', 'Thông tin chưa đầy đủ');
+      return;
+    }
+
+    const propertyId = hotel.propertyId || hotel.id;
+    const roomTypeId = selectedRoom?.id;
+    const ratePlanId = selectedRoom?.ratePlanId;
+
+    if (!propertyId || !roomTypeId || !ratePlanId) {
+      toast.error('Thiếu thông tin phòng từ server. Vui lòng quay lại chọn phòng.', 'Không thể đặt phòng');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const bookingPayload = {
+        propertyId: Number(propertyId),
+        roomTypeId: Number(roomTypeId),
+        ratePlanId: Number(ratePlanId),
+        checkInDate: toDateOnly(bookingData.startDate),
+        checkOutDate: toDateOnly(bookingData.endDate),
+        numAdults: Number(bookingData.adults || 1),
+        numChildren: Number(bookingData.children || 0),
+        roomsNeeded: Number(bookingData.rooms || 1),
+        paymentMethod,
+      };
+
+      const booking = unwrapResponse(await bookingService.createBooking(bookingPayload));
+      let checkout = null;
+
+      if (paymentMethod !== 'pay_later') {
+        checkout = unwrapResponse(await bookingService.checkout(booking.id));
+      }
+
+      setNewOrder({
+        id: booking.id,
+        orderCode: booking.bookingCode,
         name: hotel.name,
         roomName: currentRoomName,
         dateRange: `${formatDateWithSlash(bookingData.startDate)} - ${formatDateWithSlash(bookingData.endDate)}`,
-        price: formatPriceVND(total),
-        paymentMethod: paymentMethod
+        price: formatPriceVND(Number(booking.totalAmount || total)),
+        paymentMethod,
+        checkoutUrl: checkout?.checkoutUrl,
       });
-      setNewOrder(createdBooking);
       setShowSuccessModal(true);
-    } else {
-      toast.error('Vui lòng kiểm tra lại thông tin thanh toán!', 'Thông tin chưa đầy đủ');
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || 'Không thể tạo đặt phòng.';
+      toast.error(Array.isArray(message) ? message[0] : message, 'Thanh toán thất bại');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -484,9 +531,10 @@ const Payment = () => {
 
                 <button
                   onClick={handleConfirmPayment}
-                  className="w-full bg-[#3F3D7C] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#34326b] transition-all transform active:scale-95"
+                  disabled={isSubmitting}
+                  className="w-full bg-[#3F3D7C] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#34326b] transition-all transform active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Xác nhận thanh toán
+                  {isSubmitting ? 'Đang xử lý...' : 'Xác nhận thanh toán'}
                 </button>
 
                 <div className="flex items-center justify-center mt-6 text-gray-400 space-x-2">
@@ -514,6 +562,16 @@ const Payment = () => {
               <p className="text-gray-700 text-sm">
                 Mã đặt phòng: <span className="font-medium">{newOrder?.orderCode || '#NWH-MPSFYFBD-H3ASYI'}</span>
               </p>
+              {newOrder?.checkoutUrl && (
+                <a
+                  href={newOrder.checkoutUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[#3F3D7C] text-sm font-semibold underline"
+                >
+                  Mở cổng thanh toán
+                </a>
+              )}
               <p className="text-gray-500 text-sm max-w-sm mx-auto mt-4 leading-relaxed">
                 Chúng tôi đã gửi email xác nhận cùng vé điện tử đến địa chỉ email của bạn. Cảm ơn bạn đã lựa chọn NoWayHome.
               </p>

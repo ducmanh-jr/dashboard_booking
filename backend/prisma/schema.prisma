@@ -37,6 +37,7 @@ model User {
   reviews                 Review[]         @relation("CustomerReviews")
   socialAccounts          SocialAccount[]
   userSessions            UserSession[]
+  notifications           Notification[]
 
   @@index([status], map: "idx_users_status")
   @@index([userType, status], map: "idx_users_type_status")
@@ -151,6 +152,7 @@ model Booking {
   roomType            RoomType            @relation(fields: [roomTypeId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_booking_rt")
   ratePlan            RatePlan            @relation(fields: [ratePlanId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_booking_rp")
   voucher             Voucher?            @relation(fields: [voucherId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_booking_voucher")
+  bookingRooms        BookingRoom[]
 
   @@index([customerId], map: "idx_booking_customer")
   @@index([customerId, status], map: "idx_booking_customer_status")
@@ -266,6 +268,21 @@ model PartnerProfile {
 
   @@map("partner_profiles")
 }
+
+/// Danh sách email bị từ chối đăng ký đối tác.
+/// Sau khi expiresAt (mặc định 1 ngày), cron job sẽ xóa bản ghi này
+/// và xóa user liên kết để email có thể đăng ký lại bình thường.
+model PartnerBlacklist {
+  id         BigInt   @id @default(autoincrement())
+  email      String   @unique(map: "uq_partner_blacklist_email") @db.VarChar(255)
+  rejectedAt DateTime @default(now()) @map("rejected_at") @db.Timestamp(6)
+  expiresAt  DateTime @map("expires_at") @db.Timestamp(6)
+
+  @@index([expiresAt], map: "idx_partner_blacklist_expires")
+  @@map("partner_blacklist")
+}
+
+
 
 model Promotion {
   id             BigInt             @id @default(autoincrement())
@@ -393,9 +410,10 @@ model RatePlan {
   isActive   Boolean        @default(true) @map("is_active")
   createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt  DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  dailyRates DailyRate[]
-  bookings   Booking[]
-  roomType   RoomType       @relation(fields: [roomTypeId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rp_rt")
+  dailyRates   DailyRate[]
+  bookings     Booking[]
+  roomType     RoomType      @relation(fields: [roomTypeId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rp_rt")
+  bookingRooms BookingRoom[]
 
   @@map("rate_plans")
 }
@@ -420,8 +438,9 @@ model Room {
   notes      String?
   createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt  DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  property   Property         @relation(fields: [propertyId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_room_property")
-  roomType   RoomType         @relation(fields: [roomTypeId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_room_type")
+  property     Property         @relation(fields: [propertyId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_room_property")
+  roomType     RoomType         @relation(fields: [roomTypeId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_room_type")
+  bookingRooms BookingRoom[]
 
   @@unique([propertyId, roomNumber], map: "uq_room_property")
   @@map("rooms")
@@ -725,4 +744,52 @@ enum user_type_enum {
   customer
   partner
   admin
+}
+
+model Notification {
+  id         BigInt    @id @default(autoincrement())
+  userId     BigInt    @map("user_id")
+  type       String    @db.VarChar(100)
+  channel    String    @default("in_app") @db.VarChar(50)
+  title      String    @db.VarChar(500)
+  body       String?
+  data       Json      @default("{}")
+  entityType String?   @map("entity_type") @db.VarChar(100)
+  entityId   BigInt?   @map("entity_id")
+  isRead     Boolean   @default(false) @map("is_read")
+  readAt     DateTime? @map("read_at") @db.Timestamp(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_notif_user")
+
+  @@index([userId, isRead], map: "idx_notif_user_unread")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_notif_user_created")
+  @@map("notifications")
+}
+
+model BookingRoom {
+  id         BigInt   @id @default(autoincrement())
+  bookingId  BigInt   @map("booking_id")
+  roomId     BigInt   @map("room_id")
+  ratePlanId BigInt   @map("rate_plan_id")
+  roomPrice  Decimal  @map("room_price") @db.Decimal(12, 2)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  booking  Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_br_booking")
+  room     Room     @relation(fields: [roomId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_br_room")
+  ratePlan RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_br_rp")
+
+  @@unique([bookingId, roomId], map: "uq_br_booking_room")
+  @@map("booking_rooms")
+}
+
+model LegacySourceRow {
+  id          BigInt   @id @default(autoincrement())
+  sourceTable String   @map("source_table") @db.VarChar(255)
+  sourceId    String?  @map("source_id") @db.VarChar(255)
+  payload     Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@unique([sourceTable, sourceId], map: "uq_legacy_source_rows")
+  @@map("legacy_source_rows")
 }

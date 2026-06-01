@@ -360,6 +360,12 @@ export class PropertiesService {
                 amenity: true,
               },
             },
+            ratePlans: {
+              where: { isActive: true },
+              select: { id: true, name: true, basePrice: true },
+              orderBy: { id: 'asc' },
+              take: 1,
+            },
           },
           orderBy: {
             basePrice: 'asc',
@@ -435,6 +441,12 @@ export class PropertiesService {
               include: {
                 amenity: true,
               },
+            },
+            ratePlans: {
+              where: { isActive: true },
+              select: { id: true, name: true, basePrice: true },
+              orderBy: { id: 'asc' },
+              take: 1,
             },
           },
           orderBy: {

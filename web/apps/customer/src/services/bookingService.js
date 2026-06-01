@@ -8,6 +8,11 @@ export const bookingService = {
         return axiosClient.post('/api/bookings', bookingData);
     },
 
+    // Tạo phiên thanh toán cho booking - POST /api/payments/checkout/:bookingId
+    checkout: (bookingId) => {
+        return axiosClient.post(`/api/payments/checkout/${bookingId}`);
+    },
+
     // Lấy danh sách đặt phòng của user hiện tại - GET /api/bookings/me (cần Bearer token)
     getMyBookings: () => {
         return axiosClient.get('/api/bookings/me');

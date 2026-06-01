@@ -65,8 +65,11 @@ export const useAuthStore = create<AuthState>((set) => ({
       const response = await authService.login(credentials);
       
       // Nếu thành công, lưu chuỗi JWT token một cách an toàn vào máy
-      if (response.access_token) {
-        await SecureStore.setItemAsync('access_token', response.access_token);
+      if (response.accessToken) {
+        await SecureStore.setItemAsync('access_token', response.accessToken);
+      }
+      if (response.refreshToken) {
+        await SecureStore.setItemAsync('refresh_token', response.refreshToken);
       }
       
       // Đưa thông tin user vào Global State để hiển thị ra UI, tắt loading
@@ -85,8 +88,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await authService.googleLogin(credential);
-      if (response.access_token) {
-        await SecureStore.setItemAsync('access_token', response.access_token);
+      if (response.accessToken) {
+        await SecureStore.setItemAsync('access_token', response.accessToken);
+      }
+      if (response.refreshToken) {
+        await SecureStore.setItemAsync('refresh_token', response.refreshToken);
       }
       set({ user: response.user, isLoading: false, hasToken: true });
     } catch (error: any) {
@@ -103,8 +109,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const response = await authService.register(payload);
       
-      if (response.access_token) {
-        await SecureStore.setItemAsync('access_token', response.access_token);
+      if (response.accessToken) {
+        await SecureStore.setItemAsync('access_token', response.accessToken);
+      }
+      if (response.refreshToken) {
+        await SecureStore.setItemAsync('refresh_token', response.refreshToken);
         set({ user: response.user, isLoading: false, hasToken: true });
       } else {
         set({ isLoading: false });
@@ -123,6 +132,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       // Xóa token khỏi máy
       await SecureStore.deleteItemAsync('access_token');
+      await SecureStore.deleteItemAsync('refresh_token');
       // Trả state về ban đầu
       set({ user: null, isLoading: false, error: null, hasToken: false });
     } catch (e) {

@@ -11,6 +11,7 @@ import {
   Star, Camera, X
 } from 'lucide-react';
 import ETicketModal from '../../components/booking/ETicketModal';
+import { reviewService } from '../../services/reviewService';
 
 const TransactionHistory = () => {
   const { user } = useAuth();
@@ -57,19 +58,6 @@ const TransactionHistory = () => {
     );
   };
 
-  const toSlug = (str) => {
-    if (!str) return 'hotel';
-    return str
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[đĐ]/g, 'd')
-      .replace(/([^0-9a-z-\s])/g, '')
-      .replace(/(\s+)/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-+|-+$/g, '');
-  };
-
   const handlePhotoUpload = (e) => {
     const files = Array.from(e.target.files);
     const availableSlots = 5 - reviewImages.length;
@@ -89,7 +77,7 @@ const TransactionHistory = () => {
     setReviewImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleReviewSubmit = () => {
+  const handleReviewSubmit = async () => {
     if (!reviewComment.trim()) {
       alert("Vui lòng nhập nhận xét của bạn.");
       return;
@@ -97,83 +85,23 @@ const TransactionHistory = () => {
 
     setIsSubmittingReview(true);
 
-    setTimeout(() => {
-      // 1. Tạo đánh giá mới
-      const newReview = {
-        id: Date.now(),
-        userName: user?.name || "Khách ẩn danh",
-        userAvatar: user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name || 'User'}&hair=shortCombover`,
+    try {
+      await reviewService.createReview(reviewingTransaction.id, {
         rating: reviewStars,
-        date: new Date().toLocaleDateString('vi-VN'),
         comment: reviewComment,
-        roomName: reviewingTransaction.roomName || "Studio Tiêu Chuẩn",
-        images: reviewImages
-      };
+      });
 
-      // 2. Lưu vào key slug
-      const hotelSlug = toSlug(reviewingTransaction.name);
-      const storageKey = `reviews_${hotelSlug}`;
-      
-      let existingReviews = [];
-      const stored = localStorage.getItem(storageKey);
-      
-      // Nếu đã có reviews thì load, ngược lại tạo mồi từ mockReviews
-      if (stored) {
-        try {
-          existingReviews = JSON.parse(stored);
-        } catch(e) {}
-      } else {
-        const mockReviews = [
-          {
-            id: 1,
-            userName: "Nguyễn Minh Tâm",
-            userAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=Tam&hair=shortCombover`,
-            rating: 5,
-            date: "14/05/2026",
-            comment: "Khách sạn cực kỳ đẹp, phòng rộng rãi và sạch sẽ ngoài mong đợi. Nhân viên lễ tân nhiệt tình hướng dẫn các điểm đi chơi xung quanh. Buffet sáng ngon và đa dạng món ăn. Nhất định sẽ quay lại lần sau!",
-            roomName: "Studio Tiêu Chuẩn (Standard Studio)",
-            images: [
-              "https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=600&q=80",
-              "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=600&q=80"
-            ]
-          },
-          {
-            id: 2,
-            userName: "Trần Thị Thu Thảo",
-            userAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=Thao&hair=long`,
-            rating: 4,
-            date: "28/04/2026",
-            comment: "Vị trí vô cùng đắc địa, ngay trung tâm nên di chuyển rất tiện. Phòng view hồ bơi siêu chill, chụp ảnh sống ảo góc nào cũng đẹp. Chỉ có điểm trừ nhỏ là cách âm chưa thực sự xuất sắc lắm vào ban ngày, nhưng ban đêm thì rất yên tĩnh.",
-            roomName: "Phòng Deluxe Hướng Biển",
-            images: [
-              "https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=600&q=80"
-            ]
-          },
-          {
-            id: 3,
-            userName: "David Pham",
-            userAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=David`,
-            rating: 5,
-            date: "08/04/2026",
-            comment: "Very good experience! Modern room designs and high class amenities. The infinity pool is amazing. Highly recommended for couples.",
-            roomName: "Phòng Suite Thượng Hạng",
-            images: []
-          }
-        ];
-        existingReviews = mockReviews;
-      }
-
-      const updated = [newReview, ...existingReviews];
-      localStorage.setItem(storageKey, JSON.stringify(updated));
-
-      // 3. Đánh dấu đơn đặt phòng này đã được đánh giá
       markBookingAsReviewed(reviewingTransaction.id);
 
       setIsSubmittingReview(false);
       setReviewingTransaction(null);
       
-      alert("Cảm ơn đóng góp của bạn! Đánh giá đã được đăng thành công và sẽ hiển thị tức thì trên trang chi tiết phòng của khách sạn.");
-    }, 1000);
+      alert("Cảm ơn đóng góp của bạn! Đánh giá đã được gửi lên hệ thống.");
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || 'Không thể gửi đánh giá.';
+      setIsSubmittingReview(false);
+      alert(Array.isArray(message) ? message[0] : message);
+    }
   };
 
   return (

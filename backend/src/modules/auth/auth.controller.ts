@@ -22,10 +22,12 @@ import {
   RefreshResponse,
   SafeUser,
 } from './auth.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import type { AuthenticatedUser } from './strategies/jwt.strategy';
 
 @ApiTags('Auth')
@@ -83,6 +85,35 @@ export class AuthController {
     @Body() refreshTokenDto: RefreshTokenDto,
   ): Promise<RefreshResponse> {
     return this.authService.refresh(refreshTokenDto);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Create a password reset OTP for an email address' })
+  @ApiBody({ type: ForgotPasswordDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset OTP created when the email exists.',
+  })
+  forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+    @Req() request: Request,
+  ) {
+    return this.authService.forgotPassword(dto.email, {
+      ipAddress: request.ip,
+    });
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Reset password using a valid OTP' })
+  @ApiBody({ type: ResetPasswordDto })
+  @ApiResponse({ status: 200, description: 'Password reset successfully.' })
+  @ApiResponse({ status: 401, description: 'Invalid or expired OTP.' })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.email, dto.otp, dto.newPassword);
   }
 
   @Public()

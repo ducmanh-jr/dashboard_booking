@@ -9,6 +9,8 @@ import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import {
   business_type_enum,
   device_type_enum,
+  identifier_type_enum,
+  otp_purpose_enum,
   social_provider_enum,
   User,
   UserSession,
@@ -17,7 +19,7 @@ import {
   kyc_status_enum,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { randomUUID } from 'crypto';
+import { randomInt, randomUUID } from 'crypto';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
@@ -64,6 +66,15 @@ export interface LogoutResponse {
   data: null;
 }
 
+export interface ForgotPasswordResponse {
+  message: string;
+  otp?: string;
+}
+
+export interface ResetPasswordResponse {
+  message: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly saltRounds = 10;
@@ -75,9 +86,30 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto): Promise<SafeUser> {
+    // 1. Kiểm tra blacklist đối tác bị từ chối
+    if (registerDto.userType === user_type_enum.partner) {
+      const blacklisted = await this.prisma.partnerBlacklist.findUnique({
+        where: { email: registerDto.email },
+      });
+      if (blacklisted) {
+        const now = new Date();
+        if (blacklisted.expiresAt > now) {
+          const hoursLeft = Math.ceil((blacklisted.expiresAt.getTime() - now.getTime()) / (60 * 60 * 1000));
+          throw new ConflictException(
+            `Email nay da bi tu choi dang ky doi tac. Vui long thu lai sau ${hoursLeft} gio.`,
+          );
+        }
+        // Blacklist đã hết hạn → tự động xóa rồi cho phép đăng ký
+        await this.prisma.partnerBlacklist.delete({ where: { email: registerDto.email } });
+      }
+    }
+
+    // 2. Kiểm tra email/phone đã tồn tại (chỉ với user chưa bị xóa)
     const existingUser = await this.prisma.user.findFirst({
       where: {
-        OR: [{ email: registerDto.email }, { phone: registerDto.phone }],
+        deletedAt: null,
+        status: { not: user_status_enum.deleted },
+        OR: [{ email: registerDto.email }, ...(registerDto.phone ? [{ phone: registerDto.phone }] : [])],
       },
     });
 
@@ -317,6 +349,125 @@ export class AuthService {
     };
   }
 
+  async forgotPassword(
+    email: string,
+    context: { ipAddress?: string } = {},
+  ): Promise<ForgotPasswordResponse> {
+    const identifier = email.trim().toLowerCase();
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email: identifier,
+        deletedAt: null,
+        status: user_status_enum.active,
+      },
+    });
+
+    const genericMessage =
+      'Nếu email tồn tại trong hệ thống, mã OTP khôi phục mật khẩu đã được tạo.';
+
+    if (!user) {
+      return { message: genericMessage };
+    }
+
+    const otp = randomInt(100000, 1000000).toString();
+    const tokenHash = await bcrypt.hash(otp, this.saltRounds);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.otpToken.updateMany({
+        where: {
+          identifier,
+          purpose: otp_purpose_enum.reset_password,
+          usedAt: null,
+        },
+        data: {
+          usedAt: new Date(),
+        },
+      });
+
+      await tx.otpToken.create({
+        data: {
+          userId: user.id,
+          identifier,
+          identifierType: identifier_type_enum.email,
+          purpose: otp_purpose_enum.reset_password,
+          tokenHash,
+          expiresAt,
+          ipAddress: context.ipAddress,
+        },
+      });
+    });
+
+    if (this.configService.get<string>('NODE_ENV') === 'production') {
+      return { message: genericMessage };
+    }
+
+    return {
+      message: genericMessage,
+      otp,
+    };
+  }
+
+  async resetPassword(
+    email: string,
+    otp: string,
+    newPassword: string,
+  ): Promise<ResetPasswordResponse> {
+    const identifier = email.trim().toLowerCase();
+    const token = await this.prisma.otpToken.findFirst({
+      where: {
+        identifier,
+        purpose: otp_purpose_enum.reset_password,
+        usedAt: null,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (!token) {
+      throw new UnauthorizedException('OTP không hợp lệ hoặc đã hết hạn');
+    }
+
+    const isOtpValid = await bcrypt.compare(otp, token.tokenHash);
+    if (!isOtpValid) {
+      await this.prisma.otpToken.update({
+        where: { id: token.id },
+        data: { attempts: { increment: 1 } },
+      });
+      throw new UnauthorizedException('OTP không hợp lệ hoặc đã hết hạn');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, this.saltRounds);
+    if (!token.userId) {
+      throw new UnauthorizedException('OTP không hợp lệ hoặc đã hết hạn');
+    }
+    const userId = token.userId;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash },
+      });
+      await tx.otpToken.update({
+        where: { id: token.id },
+        data: { usedAt: new Date() },
+      });
+      await tx.userSession.updateMany({
+        where: {
+          userId,
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
+      });
+    });
+
+    return { message: 'Đặt lại mật khẩu thành công' };
+  }
+
   private parseTokenBigInt(value: string): bigint {
     try {
       return BigInt(value);
@@ -469,6 +620,22 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { id: parsedId } });
     if (!user) throw new UnauthorizedException('Không tìm thấy người dùng');
 
+    // Kiểm tra blacklist đối tác bị từ chối
+    const blacklisted = await this.prisma.partnerBlacklist.findUnique({
+      where: { email: user.email },
+    });
+    if (blacklisted) {
+      const now = new Date();
+      if (blacklisted.expiresAt > now) {
+        const hoursLeft = Math.ceil((blacklisted.expiresAt.getTime() - now.getTime()) / (60 * 60 * 1000));
+        throw new ConflictException(
+          `Email nay da bi tu choi dang ky doi tac. Vui long thu lai sau ${hoursLeft} gio.`,
+        );
+      }
+      // Blacklist đã hết hạn → tự động xóa rồi cho phép apply
+      await this.prisma.partnerBlacklist.delete({ where: { email: user.email } });
+    }
+
     // Nâng cấp role thành partner + cập nhật phone nếu có
     const updatedUser = await this.prisma.$transaction(async (tx) => {
       const updateData: { userType: user_type_enum; phone?: string } = {
@@ -483,11 +650,12 @@ export class AuthService {
         data: updateData,
       });
 
-      // Tạo PartnerProfile nếu chưa có
+      // Tạo hoặc reset PartnerProfile
       const existing = await tx.partnerProfile.findUnique({
         where: { userId: parsedId },
       });
       if (!existing) {
+        // Chưa có → tạo mới
         const partner = await tx.partnerProfile.create({
           data: {
             userId: parsedId,
@@ -499,6 +667,23 @@ export class AuthService {
           type: 'new_partner_registration',
           title: `Doi tac cho duyet: ${partner.businessName}`,
           body: `${updated.fullName} (${updated.email}) dang cho xet duyet ho so.`,
+          entityType: 'partner',
+          entityId: updated.id,
+          data: { partnerId: Number(partner.id), userId: Number(updated.id) },
+        });
+      } else if (existing.kycStatus === kyc_status_enum.rejected) {
+        // Đã bị từ chối trước đó → reset về pending để admin xét lại
+        const partner = await tx.partnerProfile.update({
+          where: { userId: parsedId },
+          data: {
+            kycStatus: kyc_status_enum.pending,
+            businessName: data.businessName || existing.businessName,
+          },
+        });
+        await this.notifyAdmins(tx, {
+          type: 'new_partner_registration',
+          title: `Doi tac cho duyet lai: ${partner.businessName}`,
+          body: `${updated.fullName} (${updated.email}) da gui lai yeu cau dang ky doi tac.`,
           entityType: 'partner',
           entityId: updated.id,
           data: { partnerId: Number(partner.id), userId: Number(updated.id) },
@@ -702,7 +887,16 @@ export class AuthService {
       throw new UnauthorizedException('Google OAuth chưa được cấu hình. Vui lòng thêm GOOGLE_CLIENT_ID vào .env');
     }
 
-    let payload: any;
+    interface GooglePayload {
+      aud?: string;
+      email_verified?: string | boolean;
+      sub?: string;
+      email?: string;
+      name?: string;
+      picture?: string;
+    }
+
+    let payload: GooglePayload;
     try {
       // Gọi Google tokeninfo để verify id_token
       const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`;
@@ -710,7 +904,7 @@ export class AuthService {
       if (!response.ok) {
         throw new Error(`Google API status: ${response.status}`);
       }
-      payload = await response.json();
+      payload = (await response.json()) as GooglePayload;
     } catch {
       throw new UnauthorizedException('Không thể xác minh token Google');
     }
@@ -729,10 +923,10 @@ export class AuthService {
     }
 
     return {
-      sub: payload.sub as string,
-      email: payload.email as string,
-      name: (payload.name ?? payload.email.split('@')[0]) as string,
-      picture: payload.picture as string | undefined,
+      sub: payload.sub,
+      email: payload.email,
+      name: payload.name ?? payload.email.split('@')[0],
+      picture: payload.picture,
     };
   }
 

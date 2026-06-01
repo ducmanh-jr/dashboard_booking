@@ -8,8 +8,8 @@
  * - Hiển thị danh mục địa điểm, khách sạn nổi bật.
  * ============================================================================
  */
-import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, FlatList, ActivityIndicator, RefreshControl, ImageBackground } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, FlatList, ActivityIndicator, RefreshControl, ImageBackground, Modal, Pressable, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from '../../components/SafeImage';
 import { Ionicons } from '@expo/vector-icons';
@@ -54,8 +54,22 @@ const promoBanners = [
   },
 ];
 
+const flightPartners = [
+  { label: 'Vietnam Airlines', appUrl: 'https://www.vietnamairlines.com', webFallbackUrl: 'https://www.vietnamairlines.com' },
+  { label: 'Vietjet Air', appUrl: 'https://www.vietjetair.com', webFallbackUrl: 'https://www.vietjetair.com' },
+  { label: 'Bamboo Airways', appUrl: 'https://www.bambooairways.com', webFallbackUrl: 'https://www.bambooairways.com' },
+];
+
+const transportPartners = [
+  { label: 'Grab', appUrl: 'grab://', webFallbackUrl: 'https://www.grab.com' },
+  { label: 'Be', appUrl: 'be://', webFallbackUrl: 'https://be.com.vn' },
+  { label: 'Xanh SM', appUrl: 'greensm://', webFallbackUrl: 'https://www.greensm.com/vn-vi' },
+];
+
 export default function HomeScreen() {
   const router = useRouter();
+  const [showFlightModal, setShowFlightModal] = useState(false);
+  const [showTransportModal, setShowTransportModal] = useState(false);
   const { location, checkInDate, checkOutDate, guests } = useSearchStore();
   const { favorites, toggleFavorite } = useFavoriteStore();
 
@@ -77,6 +91,20 @@ export default function HomeScreen() {
     router.push('/searchModal' as any);
   };
 
+  const openPartnerApp = async (appUrl: string, webFallbackUrl: string) => {
+    try {
+      await Linking.openURL(appUrl);
+    } catch {
+      await Linking.openURL(webFallbackUrl);
+    }
+  };
+
+  const handlePartnerPress = async (appUrl: string, webFallbackUrl: string) => {
+    setShowFlightModal(false);
+    setShowTransportModal(false);
+    await openPartnerApp(appUrl, webFallbackUrl);
+  };
+
   const { data, isPending, isError, refetch, isRefetching } = useQuery({
     queryKey: ['featured_properties'],
     queryFn: async () => {
@@ -93,21 +121,21 @@ export default function HomeScreen() {
 
   const featuredProperties: Property[] = data
     ? data.map((item) => ({
-        id: item.id.toString(),
-        title: item.name,
-        location: item.district ? `${item.district}, ${item.city}` : item.city,
-        price: item.min_nightly_price,
-        rating: item.avg_rating,
-        reviews: item.total_reviews,
-        imageUrl: item.cover_image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945',
-      }))
+      id: item.id.toString(),
+      title: item.name,
+      location: item.district ? `${item.district}, ${item.city}` : item.city,
+      price: item.min_nightly_price,
+      rating: item.avg_rating,
+      reviews: item.total_reviews,
+      imageUrl: item.cover_image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945',
+    }))
     : [];
 
   const renderHeader = () => (
     <>
       {/* Top Section with World Map Background */}
-      <ImageBackground 
-        source={{ uri: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828' }} 
+      <ImageBackground
+        source={{ uri: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828' }}
         style={styles.topSection}
         resizeMode="cover"
       >
@@ -178,11 +206,11 @@ export default function HomeScreen() {
           <Ionicons name="bed" size={16} color="white" />
           <Text style={[styles.categoryText, { color: 'white' }]}>Khách sạn</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.categoryBtn}>
+        <TouchableOpacity style={styles.categoryBtn} onPress={() => setShowFlightModal(true)}>
           <Ionicons name="airplane" size={16} color={Colors.light.text} />
           <Text style={styles.categoryText}>Vé máy bay</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.categoryBtn}>
+        <TouchableOpacity style={styles.categoryBtn} onPress={() => setShowTransportModal(true)}>
           <Ionicons name="car" size={16} color={Colors.light.text} />
           <Text style={styles.categoryText}>Phương tiện di chuyển</Text>
         </TouchableOpacity>
@@ -198,17 +226,17 @@ export default function HomeScreen() {
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: Spacing.md }}>
           {promoBanners.map((promo) => (
-            <TouchableOpacity 
-              key={promo.id} 
-              activeOpacity={0.9} 
+            <TouchableOpacity
+              key={promo.id}
+              activeOpacity={0.9}
               onPress={() => router.push('/offers' as any)}
               style={styles.promoCardContainer}
             >
               <View style={styles.promoCard}>
-                <Image 
-                  source={{ uri: promo.imageUrl }} 
-                  style={styles.promoImg} 
-                  contentFit="cover" 
+                <Image
+                  source={{ uri: promo.imageUrl }}
+                  style={styles.promoImg}
+                  contentFit="cover"
                   onError={(e) => console.log('Promo image load error for ID:', promo.id, 'Error:', e.error, 'URL:', promo.imageUrl)}
                 />
                 <View style={styles.promoOverlay}>
@@ -270,6 +298,54 @@ export default function HomeScreen() {
           </View>
         )}
       />
+      <Modal
+        visible={showFlightModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFlightModal(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowFlightModal(false)}>
+          <Pressable style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Chọn hãng bay</Text>
+            {flightPartners.map((partner) => (
+              <TouchableOpacity
+                key={partner.label}
+                style={styles.partnerButton}
+                onPress={() => handlePartnerPress(partner.appUrl, partner.webFallbackUrl)}
+              >
+                <Text style={styles.partnerButtonText}>{partner.label}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.closeButton} onPress={() => setShowFlightModal(false)}>
+              <Text style={styles.closeButtonText}>Đóng</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={showTransportModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTransportModal(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowTransportModal(false)}>
+          <Pressable style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Chọn phương tiện</Text>
+            {transportPartners.map((partner) => (
+              <TouchableOpacity
+                key={partner.label}
+                style={styles.partnerButton}
+                onPress={() => handlePartnerPress(partner.appUrl, partner.webFallbackUrl)}
+              >
+                <Text style={styles.partnerButtonText}>{partner.label}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.closeButton} onPress={() => setShowTransportModal(false)}>
+              <Text style={styles.closeButtonText}>Đóng</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -324,4 +400,11 @@ const styles = StyleSheet.create({
   promoBadgeText: { fontSize: 10, fontWeight: 'bold', color: Colors.primary },
   promoTitle: { ...Typography.h3, color: 'white', marginBottom: 4 },
   promoSubtitle: { ...Typography.caption, color: 'white', opacity: 0.9 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: Spacing.lg },
+  modalContent: { backgroundColor: 'white', borderRadius: BorderRadius.lg, padding: Spacing.lg },
+  modalTitle: { ...Typography.h3, color: Colors.light.text, marginBottom: Spacing.md, textAlign: 'center' },
+  partnerButton: { padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.light.border, marginBottom: Spacing.sm, backgroundColor: 'white' },
+  partnerButtonText: { ...Typography.body1, color: Colors.light.text, fontWeight: '600', textAlign: 'center' },
+  closeButton: { padding: Spacing.md, borderRadius: BorderRadius.md, backgroundColor: Colors.primary, marginTop: Spacing.sm },
+  closeButtonText: { ...Typography.button, color: 'white', textAlign: 'center' },
 });

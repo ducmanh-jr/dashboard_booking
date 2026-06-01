@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.nowayhome.app"
+      "bundleIdentifier": "com.nowayhome.app",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": ["grab", "be", "xanhsm"]
+      }
     },
     "splash": {
       "image": "./assets/images/logo3.jpg",

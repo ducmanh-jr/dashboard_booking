@@ -51,4 +51,12 @@ export const authService = {
     googleLogin: (credential) => {
         return axiosClient.post('/api/auth/google', { credential });
     },
+
+    forgotPassword: (email) => {
+        return axiosClient.post('/api/auth/forgot-password', { email });
+    },
+
+    resetPassword: (email, otp, newPassword) => {
+        return axiosClient.post('/api/auth/reset-password', { email, otp, newPassword });
+    },
 };

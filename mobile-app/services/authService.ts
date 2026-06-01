@@ -35,7 +35,8 @@ export interface User {
 
 export interface AuthResponse { 
   user: User; 
-  access_token: string; 
+  accessToken: string;
+  refreshToken: string;
 }
 
 export interface ChangePasswordPayload { 

@@ -48,6 +48,20 @@ export class ReviewsController {
     return this.reviewsService.createReview(user, bookingId, reviewData);
   }
 
+  @Roles(Role.CUSTOMER)
+  @Post(':bookingId')
+  @ApiOperation({
+    summary: 'Submit a post-stay review for a completed booking by booking ID',
+  })
+  @ApiResponse({ status: 201, description: 'Review submitted successfully.' })
+  createReviewByBookingId(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('bookingId') bookingId: string,
+    @Body() dto: Omit<CreateReviewBodyDto, 'bookingId'>,
+  ) {
+    return this.reviewsService.createReview(user, bookingId, dto);
+  }
+
   @Public()
   @Get('property/:id')
   @ApiOperation({
