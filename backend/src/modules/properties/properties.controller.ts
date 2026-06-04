@@ -29,30 +29,19 @@ export class PropertiesController {
   }
 
   @Public()
-  @Get(':slug')
-  @ApiOperation({ summary: 'Get public property detail by slug' })
+  @Get(':idOrSlug')
+  @ApiOperation({ summary: 'Get public property detail by ID or slug' })
   @ApiResponse({
     status: 200,
     description: 'Returns property details and room types.',
   })
-  findBySlug(
-    @Param('slug') slug: string,
+  findOne(
+    @Param('idOrSlug') idOrSlug: string,
     @Query() query: PropertyDetailQueryDto,
   ) {
-    return this.propertiesService.findBySlug(slug, query);
-  }
-
-  @Public()
-  @Get('id/:id')
-  @ApiOperation({ summary: 'Get public property detail by ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Returns property details and room types.',
-  })
-  findById(
-    @Param('id') id: string,
-    @Query() query: PropertyDetailQueryDto,
-  ) {
-    return this.propertiesService.findById(id, query);
+    if (/^\d+$/.test(idOrSlug)) {
+      return this.propertiesService.findById(idOrSlug, query);
+    }
+    return this.propertiesService.findBySlug(idOrSlug, query);
   }
 }

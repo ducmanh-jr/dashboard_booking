@@ -278,7 +278,7 @@ Run-Step "Generate Prisma client" {
     Start-ServiceWindow "nwh-admin" "pnpm --filter webadmin dev --host localhost --port 5173 --strictPort"
     Start-ServiceWindow "nwh-partner" "pnpm --filter webpartner dev --host localhost --port 5174 --strictPort"
     Start-ServiceWindow "nwh-customer" "pnpm --filter fe-web-user dev --host localhost --port 5175 --strictPort"
-    Start-ServiceWindow "nwh-mobile" "cd mobile-app && npx expo start"
+    Start-ServiceWindow "nwh-mobile" "set REACT_NATIVE_PACKAGER_HOSTNAME=$Ip&& cd mobile-app && npx expo start -c"
   }
 
   Run-Step "Doi backend san sang" {

@@ -248,6 +248,15 @@ function Avatar({ avatarUrl, initials, large }: { avatarUrl?: string | null; ini
   const [failed, setFailed] = useState(false);
   const size = large ? "h-24 w-24 text-2xl" : "h-10 w-10 text-sm";
   useEffect(() => setFailed(false), [avatarUrl]);
+  
+  // Auto-retry loading the image every 3 seconds if it failed
+  useEffect(() => {
+    if (failed) {
+      const timer = setTimeout(() => setFailed(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [failed]);
+
   return avatarUrl && !failed ? (
     <img src={avatarUrl} alt="" onError={() => setFailed(true)} className={`${size} rounded-full object-cover`} />
   ) : (

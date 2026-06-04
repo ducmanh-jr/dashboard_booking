@@ -79,6 +79,8 @@ export const PropertyCard: React.FC<PropertyCardProps> = React.memo(({ property,
   );
 });
 
+PropertyCard.displayName = 'PropertyCard';
+
 const styles = StyleSheet.create({
   card: {
     backgroundColor: Colors.light.surface,

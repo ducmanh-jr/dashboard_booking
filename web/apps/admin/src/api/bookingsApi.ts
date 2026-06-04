@@ -4,6 +4,10 @@ export const fetchBookingReport = async () => {
   return await api("/admin/booking-report");
 };
 
+export const fetchBookings = async () => {
+  return await api("/admin/bookings");
+};
+
 export const markBookingPaid = async (id: number) => {
   return await api(`/admin/bookings/${id}/mark-paid`, { method: "POST" });
 };

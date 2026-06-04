@@ -515,4 +515,194 @@ export class PartnerService {
 
     return slug || `property-${Date.now()}`;
   }
+
+  async createVoucher(user: AuthenticatedUser, dto: {
+    code: string;
+    discountType: discount_type_enum;
+    discountValue: number;
+    minOrderAmount: number;
+    maxDiscount?: number;
+    startDate: string;
+    endDate: string;
+    maxUses?: number;
+    maxUsesPerUser?: number;
+    name?: string;
+  }) {
+    const partnerProfile = await this.getPartnerProfile(user);
+
+    // Create Promotion first
+    const promotion = await this.prisma.promotion.create({
+      data: {
+        partnerId: partnerProfile.id,
+        name: dto.name || `Voucher ${dto.code}`,
+        promoType: 'custom',
+        discountType: dto.discountType,
+        discountValue: dto.discountValue,
+        maxDiscount: dto.maxDiscount || null,
+        minOrderAmount: dto.minOrderAmount,
+        startDate: new Date(dto.startDate),
+        endDate: new Date(dto.endDate),
+        maxUses: dto.maxUses || null,
+        totalUsed: 0,
+        isActive: true,
+        createdBy: BigInt(user.id),
+      },
+    });
+
+    // Create Voucher
+    const voucher = await this.prisma.voucher.create({
+      data: {
+        promotionId: promotion.id,
+        code: dto.code.toUpperCase(),
+        maxUsesPerUser: dto.maxUsesPerUser || 1,
+        totalUsed: 0,
+        isActive: true,
+      },
+    });
+
+    return {
+      id: voucher.promotionId.toString(),
+      code: voucher.code,
+      discountType: promotion.discountType,
+      discountValue: promotion.discountValue,
+      minOrderAmount: promotion.minOrderAmount,
+      maxDiscount: promotion.maxDiscount,
+      startDate: promotion.startDate,
+      endDate: promotion.endDate,
+      maxUses: promotion.maxUses,
+      maxUsesPerUser: voucher.maxUsesPerUser,
+      isActive: voucher.isActive,
+    };
+  }
+
+  async getVouchers(user: AuthenticatedUser) {
+    const partnerProfile = await this.getPartnerProfile(user);
+
+    const promotions = await this.prisma.promotion.findMany({
+      where: {
+        partnerId: partnerProfile.id,
+      },
+      include: {
+        vouchers: true,
+      },
+    });
+
+    const results = [];
+    for (const promo of promotions) {
+      for (const v of promo.vouchers) {
+        results.push({
+          id: v.promotionId.toString(),
+          code: v.code,
+          discountType: promo.discountType,
+          discountValue: promo.discountValue,
+          minOrderAmount: promo.minOrderAmount,
+          maxDiscount: promo.maxDiscount,
+          startDate: promo.startDate,
+          endDate: promo.endDate,
+          maxUses: promo.maxUses,
+          maxUsesPerUser: v.maxUsesPerUser,
+          isActive: v.isActive,
+        });
+      }
+    }
+    return results;
+  }
+
+  async deleteVoucher(user: AuthenticatedUser, code: string) {
+    const partnerProfile = await this.getPartnerProfile(user);
+
+    const voucher = await this.prisma.voucher.findFirst({
+      where: {
+        code: code.toUpperCase(),
+        promotion: {
+          partnerId: partnerProfile.id,
+        },
+      },
+    });
+
+    if (!voucher) {
+      throw new NotFoundException('Voucher not found or does not belong to you');
+    }
+
+    await this.prisma.voucher.update({
+      where: { id: voucher.id },
+      data: { isActive: false },
+    });
+
+    await this.prisma.promotion.update({
+      where: { id: voucher.promotionId },
+      data: { isActive: false },
+    });
+
+    return { success: true, message: 'Voucher deactivated successfully' };
+  }
+
+  async getBookingReport(user: AuthenticatedUser) {
+    const partnerProfile = await this.getPartnerProfile(user);
+    const properties = await this.prisma.property.findMany({
+      where: { partnerId: partnerProfile.id },
+      include: {
+        bookings: {
+          include: {
+            customer: {
+              select: {
+                fullName: true,
+                email: true,
+                phone: true,
+              },
+            },
+            roomType: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const now = new Date();
+
+    const hotels = properties.map((property) => {
+      const bookings = property.bookings.map((b) => {
+        const checkInDate = new Date(b.checkInDate);
+        const checkOutDate = new Date(b.checkOutDate);
+
+        return {
+          id: Number(b.id),
+          bookingCode: b.bookingCode,
+          customerName: b.customer?.fullName || 'N/A',
+          customerEmail: b.customer?.email || 'N/A',
+          customerPhone: b.customer?.phone || null,
+          priceLabel: b.roomType?.name || null,
+          checkInDate: b.checkInDate.toISOString(),
+          checkOutDate: b.checkOutDate.toISOString(),
+          nights: b.numNights,
+          adults: b.numAdults,
+          children: b.numChildren,
+          status: b.status,
+          paymentStatus: b.paymentStatus,
+          total: Number(b.totalAmount),
+          platformFee: Number(b.platformFeeAmount),
+          partnerPayout: Number(b.partnerPayoutAmount),
+          createdAt: b.createdAt.toISOString(),
+          specialRequests: b.specialRequests,
+          isCompleted: checkOutDate < now || (b.status as string) === 'check_out',
+          isCurrentStay: checkInDate <= now && checkOutDate >= now && (b.status as string) !== 'cancelled',
+          isFutureStay: checkInDate > now && (b.status as string) !== 'cancelled',
+        };
+      });
+
+      return {
+        propertyId: Number(property.id),
+        propertyName: property.name,
+        city: property.city,
+        address: property.address,
+        isActiveHotel: property.status === 'active',
+        bookings,
+      };
+    });
+
+    return { hotels };
+  }
 }

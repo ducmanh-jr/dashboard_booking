@@ -43,7 +43,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ? ['session_partner', 'session']
       : path.startsWith('/admin/')
         ? ['session_admin', 'session']
-        : path.startsWith('/bookings') || path.startsWith('/mock-payment')
+        : path.startsWith('/bookings')
           ? ['session_customer', 'session']
           : [
             'session',

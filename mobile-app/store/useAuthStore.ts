@@ -135,6 +135,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       await SecureStore.deleteItemAsync('refresh_token');
       // Trả state về ban đầu
       set({ user: null, isLoading: false, error: null, hasToken: false });
+      // Xóa danh sách yêu thích
+      const { useFavoriteStore } = await import('./useFavoriteStore');
+      useFavoriteStore.getState().clearFavorites();
     } catch (e) {
       set({ isLoading: false });
     }

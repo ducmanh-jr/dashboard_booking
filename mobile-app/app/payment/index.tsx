@@ -4,7 +4,7 @@
  * MỤC ĐÍCH: Màn hình Xác nhận và Thanh toán (Checkout Screen).
  * ============================================================================
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   Platform, Alert, ActivityIndicator, Modal,
@@ -64,7 +64,8 @@ type CheckoutForm = z.infer<typeof checkoutSchema>;
 const SPECIAL_REQUESTS = [
   'Phòng trên tầng cao',
   'Phòng yên tĩnh',
-  'Gần/Xa thang máy',
+  'Gần thang máy',
+  'Xa thang máy',
   'Thuê xe máy/ô tô',
   'Gửi hành lý trước',
   'Đón sân bay',
@@ -83,9 +84,17 @@ export default function PaymentScreen() {
   const { data: property, isPending: isPropertyPending } = useQuery({
     queryKey: ['property_details', propertyId],
     queryFn: async () => {
-      return await apiClient.get(`/properties/id/${propertyId}`);
+      return (await apiClient.get(`/properties/${propertyId}`)) as any;
     },
     enabled: !!propertyId,
+  });
+
+  const { data: userProfile } = useQuery({
+    queryKey: ['user_profile'],
+    queryFn: async () => {
+      const response = await apiClient.get('/users/me');
+      return response as any;
+    }
   });
 
   const { data: activeVouchers } = useQuery({
@@ -98,12 +107,9 @@ export default function PaymentScreen() {
     enabled: !!propertyId
   });
 
-  const savedActiveVouchers = useMemo(() => {
-    if (!activeVouchers) return [];
-    return activeVouchers.filter((v: any) => 
-      savedVouchers.some(savedCode => savedCode.toUpperCase().trim() === v.code.toUpperCase().trim())
-    );
-  }, [activeVouchers, savedVouchers]);
+  const availableVouchers = useMemo(() => {
+    return activeVouchers || [];
+  }, [activeVouchers]);
 
   // --- Lấy dữ liệu ngày & khách từ Zustand Store ---
   const { checkInDate, checkOutDate, guests } = useSearchStore();
@@ -119,17 +125,30 @@ export default function PaymentScreen() {
   const [appliedVoucher, setAppliedVoucher] = useState<any>(null);
 
   // --- Cấu hình react-hook-form ---
-  const { control, handleSubmit, formState: { errors } } = useForm<CheckoutForm>({
+  const { control, handleSubmit, formState: { errors }, reset } = useForm<CheckoutForm>({
     resolver: zodResolver(checkoutSchema),
-    defaultValues: { 
-      fullName: user?.fullName || '', 
-      phone: user?.phone || '', 
-      email: user?.email || '', 
-      cardNumber: '', 
-      cardExpiry: '', 
-      cardCvv: '' 
+    defaultValues: {
+      fullName: '',
+      phone: '',
+      email: '',
+      cardNumber: '',
+      cardExpiry: '',
+      cardCvv: '',
     },
   });
+
+  useEffect(() => {
+    if (userProfile || user) {
+      reset({
+        fullName: userProfile?.fullName || user?.fullName || '',
+        phone: userProfile?.phone || user?.phone || '',
+        email: userProfile?.email || user?.email || '',
+        cardNumber: '',
+        cardExpiry: '',
+        cardCvv: '',
+      });
+    }
+  }, [userProfile, user, reset]);
 
   const basePricePerNight = selectedRoomType?.basePrice || property?.roomTypes?.[0]?.basePrice || 0;
 
@@ -197,12 +216,20 @@ export default function PaymentScreen() {
 
   const createBookingMutation = useMutation({
     mutationFn: async (data: CheckoutForm) => {
+      const roomTypeId = selectedRoomType?.id || property?.roomTypes?.[0]?.id;
+      // Lấy ratePlanId từ ratePlans[0] nếu API trả về, nếu không fallback về roomTypeId
+      // (backend sẽ tự tìm đúng rate plan nếu ratePlanId không khớp)
+      const ratePlanId =
+        selectedRoomType?.ratePlans?.[0]?.id ||
+        property?.roomTypes?.[0]?.ratePlans?.[0]?.id ||
+        roomTypeId;
+
       const payload = {
         propertyId: Number(propertyId),
-        roomTypeId: selectedRoomType?.id || property?.roomTypes?.[0]?.id,
-        ratePlanId: selectedRoomType?.id || property?.roomTypes?.[0]?.id,
-        checkInDate: new Date(checkInDate).toISOString(),
-        checkOutDate: new Date(checkOutDate).toISOString(),
+        roomTypeId,
+        ratePlanId,
+        checkInDate: checkInDate,   // YYYY-MM-DD format
+        checkOutDate: checkOutDate, // YYYY-MM-DD format
         numAdults: guests.adults,
         numChildren: guests.children,
         roomsNeeded: guests.rooms,
@@ -464,13 +491,14 @@ export default function PaymentScreen() {
         {/* ===== MÃ GIẢM GIÁ ===== */}
         <Text style={styles.sectionTitle}>Mã giảm giá</Text>
         <View style={styles.sectionCard}>
-          {savedActiveVouchers.length > 0 ? (
+          {availableVouchers.length > 0 ? (
             <View style={{ gap: Spacing.sm, marginBottom: Spacing.md }}>
               <Text style={{ ...Typography.caption, color: Colors.light.textSecondary, marginBottom: 4 }}>
-                Chọn voucher đã lưu của bạn:
+                Chọn mã giảm giá phù hợp cho chỗ nghỉ này:
               </Text>
-              {savedActiveVouchers.map((voucher: any) => {
+              {availableVouchers.map((voucher: any) => {
                 const isSelected = appliedVoucher?.code === voucher.code;
+                const isVoucherSaved = savedVouchers.some(savedCode => savedCode.toUpperCase().trim() === voucher.code.toUpperCase().trim());
                 return (
                   <TouchableOpacity 
                     key={voucher.id} 
@@ -488,7 +516,7 @@ export default function PaymentScreen() {
                   >
                     <View style={{ flex: 1, marginRight: Spacing.sm }}>
                       <Text style={{ ...Typography.body2, fontWeight: '700', color: Colors.light.text }}>
-                        {voucher.code} - {voucher.name}
+                        {voucher.code} - {voucher.name} {isVoucherSaved && <Text style={{ color: Colors.primary, fontSize: 10 }}>[Đã lưu]</Text>}
                       </Text>
                       <Text style={{ ...Typography.caption, color: Colors.light.textSecondary, marginTop: 2 }}>
                         Giảm {voucher.discountType === 'percent' ? `${voucher.discountValue}%` : `${voucher.discountValue.toLocaleString('vi-VN')}đ`}
@@ -506,10 +534,7 @@ export default function PaymentScreen() {
             <View style={{ paddingVertical: 14, alignItems: 'center', marginBottom: Spacing.sm }}>
               <Ionicons name="pricetag-outline" size={32} color={Colors.light.textSecondary} style={{ marginBottom: 6 }} />
               <Text style={{ ...Typography.body2, color: Colors.light.textSecondary, textAlign: 'center', fontWeight: '500' }}>
-                Không tìm thấy voucher đã lưu phù hợp cho chỗ nghỉ này.
-              </Text>
-              <Text style={{ ...Typography.caption, color: Colors.light.textSecondary, marginTop: 4, textAlign: 'center', paddingHorizontal: Spacing.lg }}>
-                Hãy lưu mã giảm giá tại trang "Ưu đãi của bạn" trước khi thanh toán.
+                Không tìm thấy voucher phù hợp cho chỗ nghỉ này.
               </Text>
             </View>
           )}

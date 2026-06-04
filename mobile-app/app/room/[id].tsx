@@ -57,7 +57,7 @@ export default function RoomDetailScreen() {
     queryKey: ['property_details', id],
     queryFn: async () => {
       if (!isValidId) throw new Error('Invalid ID');
-      return (await apiClient.get(`/properties/id/${id}`)) as any;
+      return (await apiClient.get(`/properties/${id}`)) as any;
     },
     enabled: isValidId,
   });

@@ -15,6 +15,7 @@ import { CouponCard } from '../../components/CouponCard';
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../../services/apiClient';
 import { useVoucherStore } from '../../store/useVoucherStore';
+import { useLocalSearchParams } from 'expo-router';
 
 const formatDate = (dateString: string) => {
   if (!dateString) return '';
@@ -27,12 +28,15 @@ const formatDate = (dateString: string) => {
 
 export default function OffersScreen() {
   const { saveVoucher, isSaved } = useVoucherStore();
+  const { propertyId } = useLocalSearchParams<{ propertyId?: string }>();
 
   const { data: vouchers, isPending } = useQuery({
-    queryKey: ['active_vouchers'],
+    queryKey: ['active_vouchers', propertyId],
     queryFn: async () => {
-      const response = await apiClient.get('/vouchers/active');
-      return response as any[];
+      const response = await apiClient.get('/vouchers/active', {
+        params: propertyId ? { propertyId } : {},
+      });
+      return (response as any) as any[];
     }
   });
 

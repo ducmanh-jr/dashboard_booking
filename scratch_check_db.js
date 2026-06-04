@@ -2,31 +2,28 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-  const properties = await prisma.property.findMany({
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      transportConnections: true,
-      nearbyPlaces: true,
-    }
+  const partners = await prisma.partnerProfile.findMany({
+    select: { id: true, businessName: true, userId: true }
   });
-  
-  console.log('Total properties:', properties.length);
-  const withTransport = properties.filter(p => p.transportConnections !== null);
-  const withNearby = properties.filter(p => p.nearbyPlaces !== null);
-  
-  console.log('Properties with transportConnections:', withTransport.length);
-  console.log('Properties with nearbyPlaces:', withNearby.length);
-  
-  if (properties.length > 0) {
-    console.log('Sample properties:');
-    properties.slice(0, 5).forEach(p => {
-      console.log(`- ${p.name} (${p.slug}):`);
-      console.log(`  transportConnections:`, p.transportConnections);
-      console.log(`  nearbyPlaces:`, p.nearbyPlaces);
+  console.log('--- PARTNERS ---');
+  partners.forEach(p => console.log(`Partner ID: ${p.id}, Name: ${p.businessName}, User ID: ${p.userId}`));
+
+  const properties = await prisma.property.findMany({
+    select: { id: true, name: true, partnerId: true }
+  });
+  console.log('\n--- PROPERTIES ---');
+  properties.forEach(p => console.log(`Property ID: ${p.id}, Name: ${p.name}, Partner ID: ${p.partnerId}`));
+
+  const promotions = await prisma.promotion.findMany({
+    include: { vouchers: true }
+  });
+  console.log('\n--- PROMOTIONS & VOUCHERS ---');
+  promotions.forEach(p => {
+    console.log(`Promo ID: ${p.id}, Name: ${p.name}, Partner ID: ${p.partnerId}, isActive: ${p.isActive}, Dates: ${p.startDate.toISOString().slice(0,10)} to ${p.endDate.toISOString().slice(0,10)}`);
+    p.vouchers.forEach(v => {
+      console.log(`  -> Voucher Code: ${v.code}, isActive: ${v.isActive}`);
     });
-  }
+  });
 }
 
 main()

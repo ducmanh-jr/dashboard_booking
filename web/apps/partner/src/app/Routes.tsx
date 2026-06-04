@@ -12,6 +12,7 @@ import { Login } from "../features/auth/components/Login";
 import { DashboardTab } from "../features/rooms/components/tabs/DashboardTab";
 import { AccountSettingsPage } from "../features/account/components/AccountSettingsPage";
 import { TransactionsPage } from "../features/transactions/components/TransactionsPage";
+import { VouchersTab } from "../features/vouchers/components/VouchersTab";
 
 function CreateRoomPage() {
   const navigate = useNavigate();
@@ -93,6 +94,7 @@ export function AppRoutes({ user, onLogin, onLogout }: AppRoutesProps) {
         <Route path="/edit/:id" element={<EditRoomPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
+        <Route path="/vouchers" element={<VouchersTab />} />
         <Route path="/account" element={<AccountSettingsPage onUserUpdated={updateCurrentUser} />} />
       </Route>
 

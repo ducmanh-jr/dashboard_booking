@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "../../../../shared/components/ui";
-import { fetchBookingReport, markBookingPaid, cancelBooking, rejectCancelBooking } from "../../../../api/bookingsApi";
+import { fetchBookingReport, fetchBookings, markBookingPaid, cancelBooking, rejectCancelBooking } from "../../../../api/bookingsApi";
 import { approveRoom } from "../../../../api/roomsApi";
 import { useConfirmDialog } from "../../../../shared/components/ConfirmDialog";
 import { ADMIN_PORTAL_NAME } from "../../../../shared/config/pageTitles";
@@ -35,6 +35,8 @@ type BookingItem = {
   propertyStatus?: string | null;
   propertyIsArchived?: boolean;
   propertyArchivedLabel?: string | null;
+  voucherCode?: string | null;
+  discountAmount?: number;
 };
 
 type HotelReport = {
@@ -63,6 +65,13 @@ function fmtVnd(value: number) {
   return `${Math.round(value || 0).toLocaleString("vi-VN")} đ`;
 }
 
+function bookingPlatformFee(b: { total: number; partnerPayout: number; platformFee: number }) {
+  const fee = Number(b.platformFee);
+  if (fee > 0) return fee;
+  const inferred = Number(b.total) - Number(b.partnerPayout);
+  return inferred > 0 ? inferred : Math.round((Number(b.total) || 0) * 0.1);
+}
+
 function fmtDate(value: string) {
   const [year, month, day] = String(value).slice(0, 10).split("-");
   return year && month && day ? `${Number(day)}/${Number(month)}/${year}` : "-";
@@ -76,8 +85,10 @@ function toDateOnly(date: Date) {
 }
 
 function belongsToUpcomingTab(booking: BookingItem) {
+  // Only use isFutureStay (computed from date+status), NOT raw status === 'pending'
+  // so that expired-pending bookings don't wrongly appear in upcoming tab
   return (
-    (booking.isFutureStay || booking.status === "pending") &&
+    booking.isFutureStay &&
     !booking.isCurrentStay &&
     !booking.isCompleted &&
     booking.status !== "cancelled"
@@ -105,10 +116,12 @@ function getPresetRange(preset: string) {
 
 function bookingStatusKey(booking: BookingItem) {
   if (booking.status === "cancelled") return "cancelled";
+  // Check date-computed flags FIRST (before raw status) so a past-pending
+  // booking shows as "completed" not "pending", and current-pending shows as "current"
   if (booking.isCompleted) return "completed";
-  if (booking.status === "pending") return "pending";
   if (booking.isCurrentStay) return "current";
   if (booking.isFutureStay) return "upcoming";
+  if (booking.status === "pending") return "pending";
   return "unfinished";
 }
 
@@ -178,6 +191,9 @@ export function BookingsTab() {
   const [detail, setDetail] = useState<HotelReport | null>(null);
   const [targetId, setTargetId] = useState<number | null>(null);
   const [shouldHighlight, setShouldHighlight] = useState(false);
+  const [viewMode, setViewMode] = useState<"hotels" | "bookings">("hotels");
+  const [rawBookings, setRawBookings] = useState<any[]>([]);
+  const [selectedFlatBooking, setSelectedFlatBooking] = useState<BookingItem | null>(null);
 
   useEffect(() => {
     if (locState?.filter) {
@@ -216,10 +232,14 @@ export function BookingsTab() {
     }
     setErr("");
     try {
-      const result = await fetchBookingReport();
+      const [result, bookingsResult] = await Promise.all([
+        fetchBookingReport(),
+        fetchBookings()
+      ]);
       const hotels = result.hotels || [];
       bookingReportCache = hotels;
       setHotels(hotels);
+      setRawBookings(bookingsResult || []);
       setDetail((current) =>
         current
           ? hotels.find((hotel: HotelReport) => hotel.propertyId === current.propertyId) || current
@@ -254,6 +274,64 @@ export function BookingsTab() {
     load().catch(() => {});
   }, []);
 
+  const transformedBookings = useMemo(() => {
+    return rawBookings.map((b) => {
+      // Use backend-computed flags directly — backend handles all statuses correctly
+      // (pending/confirmed/checked_in/checked_out) based on actual date comparison
+      const isCompleted: boolean = b.isCompleted ?? false;
+      const isCurrentStay: boolean = b.isCurrentStay ?? false;
+      const isFutureStay: boolean = b.isFutureStay ?? false;
+
+      return {
+        id: b.id,
+        bookingCode: b.bookingCode,
+        customerName: b.user?.fullName || "Chưa rõ",
+        customerEmail: b.user?.email || "",
+        customerPhone: b.user?.phone || null,
+        priceLabel: b.room ? `${b.room.property?.name || "Khách sạn"} - ${b.room.name || "Phòng"}` : null,
+        checkInDate: b.checkInDate,
+        checkOutDate: b.checkOutDate,
+        nights: b.nights,
+        adults: b.adults,
+        children: b.children,
+        status: b.status,
+        paymentStatus: b.paymentStatus,
+        total: b.total,
+        platformFee: Number(b.platformFee) > 0 
+          ? Number(b.platformFee) 
+          : (Number(b.total) - Number(b.partnerPayout) > 0 ? Number(b.total) - Number(b.partnerPayout) : Math.round((Number(b.total) || 0) * 0.1)),
+        partnerPayout: Number(b.partnerPayout) > 0 && Number(b.partnerPayout) !== Number(b.total) 
+          ? Number(b.partnerPayout) 
+          : Math.round((Number(b.total) || 0) * 0.9),
+        createdAt: b.createdAt,
+        specialRequests: b.specialRequests,
+        cancellationReason: b.cancellationReason,
+        isCompleted,
+        isCurrentStay,
+        isFutureStay,
+        propertyStatus: b.room?.property?.status,
+        propertyIsArchived: b.room?.property?.isArchived,
+        voucherCode: b.voucherCode || null,
+        discountAmount: b.discountAmount || 0,
+      };
+    });
+  }, [rawBookings]);
+
+  const filteredBookings = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const range = timePreset === "custom" ? { from: dateFrom, to: dateTo } : getPresetRange(timePreset);
+    return transformedBookings.filter((booking) => {
+      const matchStatus = statusFilter === "all" || bookingStatusKey(booking) === statusFilter;
+      const matchSearch = !q || [
+        booking.bookingCode,
+        booking.customerName,
+        booking.customerEmail,
+        booking.priceLabel || ""
+      ].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
+      return matchStatus && matchSearch && bookingInRange(booking, range.from, range.to);
+    });
+  }, [transformedBookings, search, timePreset, dateFrom, dateTo, statusFilter]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const range = timePreset === "custom" ? { from: dateFrom, to: dateTo } : getPresetRange(timePreset);
@@ -271,8 +349,8 @@ export function BookingsTab() {
       const grossRevenue = sum(activeBookings, "total");
       const pendingRevenue = grossRevenue - earnedRevenue;
       const earnedCommission = sum(completed, "platformFee");
-      // Ước tính hoa hồng pending dựa trên tỷ lệ từ đơn đã hoàn thành
-      const commissionRate = earnedRevenue > 0 ? earnedCommission / earnedRevenue : 0;
+      // Ước tính hoa hồng pending dựa trên tỷ lệ từ đơn đã hoàn thành (mặc định 10% nếu chưa có)
+      const commissionRate = earnedRevenue > 0 ? earnedCommission / earnedRevenue : 0.1;
       const grossCommission = sum(activeBookings, "platformFee");
       // Nếu platformFee chưa được ghi nhận (=0) cho đơn pending → ước tính
       const pendingCommissionRaw = grossCommission - earnedCommission;
@@ -343,9 +421,35 @@ export function BookingsTab() {
 
   return (
     <div className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div>
-        <h2 className="text-lg font-bold tracking-tight text-slate-950">Quản lý đặt phòng</h2>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">Theo dõi lưu trú, đơn đặt phòng, doanh thu và hoa hồng của hệ thống.</p>
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-lg font-bold tracking-tight text-slate-950">Quản lý đặt phòng</h2>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Theo dõi lưu trú, đơn đặt phòng, doanh thu và hoa hồng của hệ thống.</p>
+        </div>
+        <div className="flex border rounded-md overflow-hidden bg-white shadow-sm self-start">
+          <button
+            onClick={() => setViewMode("hotels")}
+            className={cn(
+              "px-3 py-1.5 text-xs font-bold transition-all",
+              viewMode === "hotels"
+                ? "bg-primary text-primary-foreground"
+                : "text-slate-600 hover:bg-slate-50"
+            )}
+          >
+            Thống kê theo Khách sạn
+          </button>
+          <button
+            onClick={() => setViewMode("bookings")}
+            className={cn(
+              "px-3 py-1.5 text-xs font-bold transition-all",
+              viewMode === "bookings"
+                ? "bg-primary text-primary-foreground"
+                : "text-slate-600 hover:bg-slate-50"
+            )}
+          >
+            Danh sách Đơn đặt phòng
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
@@ -362,7 +466,7 @@ export function BookingsTab() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
             </svg>
             <input
-              placeholder="Tìm khách sạn, đối tác, thành phố..."
+              placeholder={viewMode === "hotels" ? "Tìm khách sạn, đối tác, thành phố..." : "Tìm mã đặt, khách hàng, khách sạn..."}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="h-9 w-full rounded-md border bg-white pl-8 pr-3 text-xs outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -402,78 +506,146 @@ export function BookingsTab() {
         </div>
       </div>
 
-      <div className="bg-card border rounded-lg overflow-hidden max-h-[70vh] overflow-y-auto">
-        <table className="w-full min-w-[980px] text-sm">
-          <thead className="bg-muted/50 text-left sticky top-0 z-10">
-            <tr>
-              <th className="px-4 py-3 font-bold">Khách sạn</th>
-              <th className="px-4 py-3 font-bold">Đối tác</th>
-              <th className="w-[110px] px-4 py-3 font-bold text-center">Lưu trú</th>
-              <th className="px-4 py-3 font-bold text-center">Số đơn</th>
-              <th className="px-4 py-3 font-bold">Doanh thu</th>
-              <th className="px-4 py-3 font-bold">Hoa hồng</th>
-              <th className="px-4 py-3 font-bold text-right">Hành động</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {filtered.length === 0 && (
+      {viewMode === "hotels" ? (
+        <div className="bg-card border rounded-lg overflow-hidden max-h-[70vh] overflow-y-auto">
+          <table className="w-full min-w-[980px] text-sm">
+            <thead className="bg-muted/50 text-left sticky top-0 z-10">
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground font-medium">Không có dữ liệu</td>
+                <th className="px-4 py-3 font-bold">Khách sạn</th>
+                <th className="px-4 py-3 font-bold">Đối tác</th>
+                <th className="w-[110px] px-4 py-3 font-bold text-center">Lưu trú</th>
+                <th className="px-4 py-3 font-bold text-center">Số đơn</th>
+                <th className="px-4 py-3 font-bold">Doanh thu</th>
+                <th className="px-4 py-3 font-bold">Hoa hồng</th>
+                <th className="px-4 py-3 font-bold text-right">Hành động</th>
               </tr>
-            )}
-            {filtered.map((hotel) => {
-              const isTarget = shouldHighlight && targetId && hotel.bookings.some(b => b.id === targetId);
-              return (
+            </thead>
+            <tbody className="divide-y">
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground font-medium">Không có dữ liệu</td>
+                </tr>
+              )}
+              {filtered.map((hotel) => {
+                const isTarget = shouldHighlight && targetId && hotel.bookings.some(b => b.id === targetId);
+                return (
+                  <tr 
+                    key={hotel.propertyId} 
+                    onClick={() => setDetail(hotel)} 
+                    className={cn(
+                      "cursor-pointer transition-all duration-500 hover:bg-indigo-50/50",
+                      isTarget ? "animate-highlight-pulse bg-primary/10" : "",
+                      !hotel.isActiveHotel && "bg-slate-50 opacity-75"
+                    )}
+                  >
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="font-bold text-slate-950">{hotel.propertyName}</div>
+                      {hotel.isArchived ? (
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">Khách sạn đã ngừng hoạt động</span>
+                      ) : !hotel.isActiveHotel && (
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">Chờ duyệt</span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 text-xs text-slate-500">{hotel.city || hotel.address}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-xs text-slate-800">{hotel.partnerHotelName || "-"}</div>
+                    <div className="text-[10px] text-slate-500">{hotel.partnerEmail || "-"}</div>
+                  </td>
+                  <td className="w-[110px] px-4 py-3 text-center">
+                    {hotel.currentStayCount > 0 ? (
+                      <span className="inline-flex min-w-[76px] items-center justify-center whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-bold leading-5 text-blue-700">{hotel.currentStayCount} đang ở</span>
+                    ) : (
+                      <span className="text-slate-300">-</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-center text-sm">{splitCount(hotel.completedBookingsCount, hotel.pendingBookingsCount)}</td>
+                  <td className="px-4 py-3 text-sm">{splitMoney(hotel.earnedRevenue, Number(hotel.pendingRevenue || 0))}</td>
+                  <td className="px-4 py-3 text-sm">{splitMoney(hotel.earnedCommission, Number(hotel.pendingCommission || 0))}</td>
+                  <td className="px-4 py-3 text-right">
+                    {!hotel.isActiveHotel && !hotel.isArchived && (
+                      <button
+                        onClick={(e) => approveHotel(hotel.propertyId, e)}
+                        className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-green-600 text-white hover:bg-green-700 transition shadow-sm"
+                      >
+                        Duyệt
+                      </button>
+                    )}
+                  </td>
+                </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="bg-card border rounded-lg overflow-hidden max-h-[70vh] overflow-y-auto">
+          <table className="w-full min-w-[980px] text-sm">
+            <thead className="bg-muted/50 text-left sticky top-0 z-10">
+              <tr>
+                <th className="px-4 py-3 font-bold">Mã đặt</th>
+                <th className="px-4 py-3 font-bold">Khách hàng</th>
+                <th className="px-4 py-3 font-bold">Khách sạn / Phòng</th>
+                <th className="px-4 py-3 font-bold text-center">Thời gian</th>
+                <th className="px-4 py-3 font-bold text-center">Trạng thái</th>
+                <th className="px-4 py-3 font-bold text-right">Tổng tiền</th>
+                <th className="px-4 py-3 font-bold text-right">Hoa hồng</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {filteredBookings.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground font-medium">Không có dữ liệu</td>
+                </tr>
+              )}
+              {filteredBookings.map((booking) => (
                 <tr 
-                  key={hotel.propertyId} 
-                  onClick={() => setDetail(hotel)} 
+                  key={booking.id} 
+                  onClick={() => setSelectedFlatBooking(booking)} 
                   className={cn(
-                    "cursor-pointer transition-all duration-500 hover:bg-indigo-50/50",
-                    isTarget ? "animate-highlight-pulse bg-primary/10" : "",
-                    !hotel.isActiveHotel && "bg-slate-50 opacity-75"
+                    "cursor-pointer hover:bg-indigo-50/50 transition-colors",
+                    booking.propertyIsArchived && "opacity-60 bg-slate-50"
                   )}
                 >
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="font-bold text-slate-950">{hotel.propertyName}</div>
-                    {hotel.isArchived ? (
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">Khách sạn đã ngừng hoạt động</span>
-                    ) : !hotel.isActiveHotel && (
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">Chờ duyệt</span>
-                    )}
-                  </div>
-                  <div className="mt-0.5 text-xs text-slate-500">{hotel.city || hotel.address}</div>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="font-medium text-xs text-slate-800">{hotel.partnerHotelName || "-"}</div>
-                  <div className="text-[10px] text-slate-500">{hotel.partnerEmail || "-"}</div>
-                </td>
-                <td className="w-[110px] px-4 py-3 text-center">
-                  {hotel.currentStayCount > 0 ? (
-                    <span className="inline-flex min-w-[76px] items-center justify-center whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-bold leading-5 text-blue-700">{hotel.currentStayCount} đang ở</span>
-                  ) : (
-                    <span className="text-slate-300">-</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-center text-sm">{splitCount(hotel.completedBookingsCount, hotel.pendingBookingsCount)}</td>
-                <td className="px-4 py-3 text-sm">{splitMoney(hotel.earnedRevenue, Number(hotel.pendingRevenue || 0))}</td>
-                <td className="px-4 py-3 text-sm">{splitMoney(hotel.earnedCommission, Number(hotel.pendingCommission || 0))}</td>
-                <td className="px-4 py-3 text-right">
-                  {!hotel.isActiveHotel && !hotel.isArchived && (
-                    <button
-                      onClick={(e) => approveHotel(hotel.propertyId, e)}
-                      className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-green-600 text-white hover:bg-green-700 transition shadow-sm"
-                    >
-                      Duyệt
-                    </button>
-                  )}
-                </td>
-              </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                  <td className="px-4 py-3 font-bold text-xs uppercase text-slate-900">{booking.bookingCode}</td>
+                  <td className="px-4 py-3">
+                    <div className="font-bold text-slate-800">{booking.customerName}</div>
+                    <div className="text-[10px] text-slate-500">{booking.customerEmail}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs font-medium text-slate-700">
+                    {booking.priceLabel || "-"}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <div className="font-bold text-xs">{fmtDate(booking.checkInDate)} - {fmtDate(booking.checkOutDate)}</div>
+                    <div className="text-[10px] text-slate-500">{booking.nights} đêm</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col items-center gap-1">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                        booking.isCompleted ? "text-green-600 border-green-200 bg-green-50" :
+                        booking.status === "pending" ? "text-amber-600 border-amber-200 bg-amber-50" :
+                        booking.status === "cancelled" ? "text-destructive border-red-200 bg-red-50" :
+                        "text-green-600 border-green-200 bg-green-50"
+                      }`}>
+                        {booking.isCompleted ? "Đã xong" :
+                         booking.status === "pending" ? "Chờ thanh toán" :
+                         booking.status === "cancelled" ? "Đã hủy" :
+                         booking.status === "confirmed" ? "Xác nhận" : booking.status}
+                      </span>
+                      <span className="text-[9px] text-slate-400 italic">
+                        {booking.isCompleted ? "Đã trả phòng" : booking.isCurrentStay ? "Đang ở" : booking.isFutureStay ? "Sắp tới" : ""}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right font-semibold text-slate-800">{fmtVnd(booking.total)}</td>
+                  <td className="px-4 py-3 text-right font-bold text-primary">{fmtVnd(bookingPlatformFee(booking))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {detail && (
         <BookingDetailModal 
@@ -481,6 +653,14 @@ export function BookingsTab() {
           onClose={() => setDetail(null)} 
           onRefresh={load} 
           onNavigateToRoom={(propertyId) => navigate("/rooms", { state: { filter: "approved", targetId: propertyId, highlight: true, fromTab: "bookings", fromTargetPropertyId: propertyId } })} 
+        />
+      )}
+
+      {selectedFlatBooking && (
+        <SingleBookingDetailModal
+          booking={selectedFlatBooking}
+          onClose={() => setSelectedFlatBooking(null)}
+          onRefresh={load}
         />
       )}
     </div>
@@ -610,7 +790,7 @@ function BookingDetailModal({ hotel, onClose, onRefresh, onNavigateToRoom }: { h
                       </span>
                     </div>
                   </td>
-                  <td className="p-4 text-right font-bold text-primary">{fmtVnd(booking.platformFee)}</td>
+                  <td className="p-4 text-right font-bold text-primary">{fmtVnd(bookingPlatformFee(booking))}</td>
                 </tr>
                 );
               })}
@@ -630,17 +810,29 @@ function SingleBookingDetailModal({ booking, onClose, onRefresh }: { booking: Bo
   const [loading, setLoading] = useState(false);
   const { confirm, confirmDialog } = useConfirmDialog();
   const isCancelled = booking.status === 'cancelled';
+  const isCheckedOut = booking.status === 'checked_out';
   const isPaidOnline = booking.paymentStatus === 'paid';
   const isPendingCancel = booking.cancellationReason && booking.cancellationReason.startsWith("PENDING_CANCEL");
+  const isCurrentGuest = booking.isCurrentStay || booking.status === 'checked_in';
+  const canAdminCancelInitiative = !isCurrentGuest;
+  const hasAnyAction = isPendingCancel || !isPaidOnline || canAdminCancelInitiative;
   
+  // Trường hợp trả phòng sớm: khách đã check-in, admin duyệt hủy => status=checked_out, tiền chảy vào doanh thu
+  const isEarlyCheckout = isCheckedOut && booking.cancellationReason?.includes('Trả phòng sớm - không hoàn tiền');
+
   let displayPaymentStatus = '';
   let statusColor = 'text-amber-600';
   
-  if (isCancelled) {
+  if (isEarlyCheckout) {
+    statusColor = 'text-orange-600';
+    displayPaymentStatus = 'Trả phòng sớm (Tiền vào doanh thu - không hoàn)';
+  } else if (isCancelled) {
     statusColor = 'text-red-600';
-    displayPaymentStatus = isPaidOnline ? 'Đã hủy (He thong da hoan tien)' : 'Đã hủy (He thong tu dong huy)';
+    displayPaymentStatus = isPaidOnline
+      ? 'Đã hủy (Đã hoàn tiền)'
+      : 'Đã hủy (Không cần hoàn tiền)';
   } else if (isPaidOnline) {
-    displayPaymentStatus = 'Da thanh toan (Online)';
+    displayPaymentStatus = 'Đã thanh toán (Online)';
     statusColor = 'text-green-600';
   } else if (booking.isCompleted) {
     displayPaymentStatus = 'Đã thanh toán (Tại khách sạn)';
@@ -653,9 +845,15 @@ function SingleBookingDetailModal({ booking, onClose, onRefresh }: { booking: Bo
   const paymentMethod = isCancelled ? `${initialMethod} (Đơn đã hủy)` : (isPaidOnline ? initialMethod : (booking.status === 'confirmed' || booking.isCompleted ? 'Tiền mặt / Quẹt thẻ (Tại khách sạn)' : 'Chưa xác định'));
 
   async function handleAction(action: string) {
+    let message = `Bạn muốn thực hiện thao tác "${action}" cho đơn ${booking.bookingCode}?`;
+    if (action === 'cancel' && isCurrentGuest) {
+      message = `⚠️ Khách đang ở trong phòng (đã check-in).\n\nDuyệt hủy này sẽ:\n- Đổi trạng thái thành \"Trả phòng sớm\"\n- Tiền KHAI NỘP vào doanh thu của admin & đối tác (không hoàn khách)\n- Hoàn lại phòng từ hôm nay để có thể tái đặt\n\nBạn xác nhận?`;
+    } else if (action === 'cancel' && isPaidOnline) {
+      message = `Hủy đơn ${booking.bookingCode}. Vì khách đã thanh toán online, hệ thống sẽ đánh dấu trạng thái hoàn tiền. Bạn xác nhận?`;
+    }
     const ok = await confirm({
       title: "Xác nhận thao tác booking",
-      message: `Bạn muốn thực hiện thao tác "${action}" cho đơn ${booking.bookingCode}?`,
+      message,
       confirmText: "Thực hiện",
       tone: action === "cancel" ? "danger" : "default",
     });
@@ -752,9 +950,15 @@ function SingleBookingDetailModal({ booking, onClose, onRefresh }: { booking: Bo
                     <span className="text-muted-foreground">Tổng khách trả:</span>
                     <span className={isCancelled ? 'line-through' : 'font-bold'}>{fmtVnd(booking.total)}</span>
                   </div>
+                  {booking.voucherCode && (
+                    <div className="flex justify-between text-emerald-600 font-medium">
+                      <span>Voucher áp dụng ({booking.voucherCode}):</span>
+                      <span>-{fmtVnd(booking.discountAmount || 0)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-primary font-bold">
                     <span>Hoa hồng Admin:</span>
-                    <span className={isCancelled ? 'line-through opacity-50' : ''}>{fmtVnd(isCancelled ? 0 : booking.platformFee)}</span>
+                    <span className={isCancelled ? 'line-through opacity-50' : ''}>{fmtVnd(isCancelled ? 0 : bookingPlatformFee(booking))}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
                     <span>Tra cho Đối tác:</span>
@@ -778,45 +982,59 @@ function SingleBookingDetailModal({ booking, onClose, onRefresh }: { booking: Bo
             </section>
           </div>
 
-          {!isCancelled && !booking.isCompleted && (
+          {!isCancelled && !booking.isCompleted && hasAnyAction && (
             <section className="space-y-2">
               <div className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider">Hành động Admin</div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex gap-2 justify-center">
                 {isPendingCancel ? (
                   <>
                     <button 
                       disabled={loading}
                       onClick={() => handleAction('cancel')}
-                      className="py-2 text-xs font-bold border rounded bg-red-600 hover:bg-red-700 text-white transition-colors"
+                      className="flex-1 py-2 text-xs font-bold border rounded bg-red-600 hover:bg-red-700 text-white transition-colors"
                     >
                       Duyệt hủy
                     </button>
                     <button 
                       disabled={loading}
                       onClick={() => handleAction('reject_cancel')}
-                      className="py-2 text-xs font-bold border rounded hover:bg-slate-50 text-slate-700 border-slate-300 transition-colors"
+                      className="flex-1 py-2 text-xs font-bold border rounded hover:bg-slate-50 text-slate-700 border-slate-300 transition-colors"
                     >
                       Từ chối hủy
                     </button>
                   </>
                 ) : (
                   <>
-                    {!isPaidOnline && (
-                      <button 
-                        disabled={loading}
-                        onClick={() => handleAction('confirm_payment')}
-                        className="py-2 text-xs font-bold border rounded hover:bg-green-50 text-green-700 border-green-200 transition-colors"
-                      >
-                        Xác nhận thanh toán
-                      </button>
+                    {!isPaidOnline ? (
+                      <>
+                        <button 
+                          disabled={loading}
+                          onClick={() => handleAction('confirm_payment')}
+                          className="flex-1 py-2 text-xs font-bold border rounded hover:bg-green-50 text-green-700 border-green-200 transition-colors"
+                        >
+                          Xác nhận thanh toán
+                        </button>
+                        {canAdminCancelInitiative && (
+                          <button 
+                            disabled={loading}
+                            onClick={() => handleAction('cancel')}
+                            className="flex-1 py-2 text-xs font-bold border rounded hover:bg-red-50 text-red-700 border-red-200 transition-colors"
+                          >
+                            Hủy đơn hàng
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      canAdminCancelInitiative && (
+                        <button 
+                          disabled={loading}
+                          onClick={() => handleAction('cancel')}
+                          className="w-1/2 py-2 text-xs font-bold border rounded hover:bg-red-50 text-red-700 border-red-200 transition-colors"
+                        >
+                          Hủy đơn hàng
+                        </button>
+                      )
                     )}
-                    <button 
-                      disabled={loading}
-                      onClick={() => handleAction('cancel')}
-                      className="py-2 text-xs font-bold border rounded hover:bg-red-50 text-red-700 border-red-200 transition-colors"
-                    >
-                      Hủy đơn hàng
-                    </button>
                   </>
                 )}
               </div>
@@ -829,7 +1047,9 @@ function SingleBookingDetailModal({ booking, onClose, onRefresh }: { booking: Bo
           </button>
         </div>
       </div>
-      {confirmDialog}
+      <div onClick={(e) => e.stopPropagation()}>
+        {confirmDialog}
+      </div>
     </div>
   );
 }

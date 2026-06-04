@@ -12,7 +12,11 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.nowayhome.app",
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["grab", "be", "xanhsm"]
+        "LSApplicationQueriesSchemes": [
+          "grab",
+          "be",
+          "xanhsm"
+        ]
       }
     },
     "splash": {
@@ -44,7 +48,9 @@
         }
       ],
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

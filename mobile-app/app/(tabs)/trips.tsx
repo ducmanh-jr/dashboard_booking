@@ -68,7 +68,7 @@ export default function TripsScreen() {
     queryKey: ['my_bookings'],
     queryFn: async () => {
       const response = await apiClient.get('/bookings/me');
-      return response as any[];
+      return response as unknown as any[];
     },
     refetchInterval: 5000,
   });
@@ -79,9 +79,28 @@ export default function TripsScreen() {
 
   const bookings = allBookings || [];
 
-  const upcomingTrips = bookings.filter(b => b.status === 'pending' || b.status === 'confirmed' || b.status === 'checked_in');
-  const pastTrips = bookings.filter(b => b.status === 'checked_out');
-  const cancelledTrips = bookings.filter(b => b.status === 'cancelled');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const upcomingTrips = bookings.filter(b => {
+    const isCancelled = b.status === 'cancelled' || b.status === 'canceled';
+    if (isCancelled) return false;
+    if (b.status === 'checked_out') return false;
+    const checkOut = new Date(b.checkOutDate);
+    checkOut.setHours(0, 0, 0, 0);
+    return checkOut >= today;
+  });
+
+  const pastTrips = bookings.filter(b => {
+    const isCancelled = b.status === 'cancelled' || b.status === 'canceled';
+    if (isCancelled) return false;
+    if (b.status === 'checked_out') return true;
+    const checkOut = new Date(b.checkOutDate);
+    checkOut.setHours(0, 0, 0, 0);
+    return checkOut < today;
+  });
+
+  const cancelledTrips = bookings.filter(b => b.status === 'cancelled' || b.status === 'canceled');
 
   const activeData = activeTab === 'upcoming' ? upcomingTrips : activeTab === 'past' ? pastTrips : cancelledTrips;
 
@@ -129,10 +148,20 @@ export default function TripsScreen() {
               const paymentStatus = item.paymentStatus;
               const isPendingCancel = item.cancellationReason && item.cancellationReason.startsWith('PENDING_CANCEL');
 
+              const checkOut = new Date(item.checkOutDate);
+              checkOut.setHours(0, 0, 0, 0);
+              const hasEnded = checkOut < today;
+
               if (isPendingCancel) {
                 statusText = 'Chờ duyệt hủy';
                 statusColor = '#F59E0B'; // Orange
-              } else if (paymentStatus === 'unpaid' && bookingStatus !== 'canceled' && bookingStatus !== 'cancelled') {
+              } else if (bookingStatus === 'canceled' || bookingStatus === 'cancelled') {
+                statusText = 'Đã hủy';
+                statusColor = '#9CA3AF'; // Gray
+              } else if (hasEnded || bookingStatus === 'checked_out') {
+                statusText = 'Đã đi / Hoàn thành';
+                statusColor = '#4ADE80'; // Green
+              } else if (paymentStatus === 'unpaid') {
                 isUnpaid = true;
                 statusText = 'Chưa thanh toán';
                 statusColor = '#EF4444'; // Red
@@ -142,12 +171,6 @@ export default function TripsScreen() {
               } else if (bookingStatus === 'checked_in') {
                 statusText = 'Đang ở';
                 statusColor = Colors.primary;
-              } else if (bookingStatus === 'checked_out') {
-                statusText = 'Đã đi / Hoàn thành';
-                statusColor = '#4ADE80';
-              } else if (bookingStatus === 'canceled' || bookingStatus === 'cancelled') {
-                statusText = 'Đã hủy';
-                statusColor = '#9CA3AF'; // Gray
               } else {
                 statusText = 'Chờ xử lý';
                 statusColor = '#F59E0B'; // Orange
@@ -156,6 +179,8 @@ export default function TripsScreen() {
             const coverImage = item.property?.media?.find((m: any) => m.isCover)?.url 
               || item.property?.media?.[0]?.url 
               || 'https://images.unsplash.com/photo-1566073771259-6a8506099945';
+
+            const showReviewButton = bookingStatus === 'checked_out' || (hasEnded && bookingStatus !== 'cancelled' && bookingStatus !== 'canceled');
 
             return (
               <TouchableOpacity style={styles.card} onPress={() => {
@@ -180,7 +205,7 @@ export default function TripsScreen() {
                       </View>
                     )}
                   </View>
-                  {bookingStatus === 'checked_out' && (
+                  {showReviewButton && (
                     <TouchableOpacity 
                       style={styles.reviewBtn}
                       onPress={() => router.push({ pathname: '/review/[id]', params: { id: String(item.id) } })}
@@ -198,7 +223,6 @@ export default function TripsScreen() {
           ListFooterComponent={
             activeTab === 'upcoming' && activeData.length > 0 ? <Text style={styles.footerText}>Bạn đã xem hết danh sách chuyến đi sắp tới.</Text> : null
           }
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
         />
       )}
     </SafeAreaView>

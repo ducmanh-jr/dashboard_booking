@@ -25,7 +25,12 @@ Chúng tôi đã viết lại các bước kiểm tra và khởi chạy để đ
 4. **Kiểm tra trạng thái sẵn sàng (Healthcheck):** Sửa lỗi kiểm tra loopback giúp hệ thống xác thực trạng thái sẵn sàng thông qua `localhost` (hỗ trợ cả IPv4 và IPv6) thay vì địa chỉ cứng `127.0.0.1` dễ gây treo script trên Windows.
 5. **Trình duyệt tự động:** Tự động mở cùng lúc cả 3 trang web trên trình duyệt Chrome của bạn.
 
-### 3. Nâng cấp Script Dừng Hệ thống (`stop-all.bat`)
+### 3. React Native LogBox Red Screen Fix
+- **Replaced console.error with console.warn:**
+  - Trong `apiClient.ts` và `useFavoriteStore.ts`, thay đổi `console.error` thành `console.warn` cho các lỗi API đã được xử lý và hết hạn phiên làm việc.
+  - Việc này giúp ngăn chặn Expo/React Native hiển thị popup lỗi đỏ toàn màn hình (LogBox) trong quá trình phát triển khi phiên làm việc của người dùng hết hạn hoặc API trả về lỗi xác thực, tạo trải nghiệm kiểm thử mượt mà hơn.
+
+### 4. Nâng cấp Script Dừng Hệ thống (`stop-all.bat`)
 - Tự động tắt sạch các cửa sổ CMD của cả 5 dịch vụ (`nwh-backend`, `nwh-admin`, `nwh-partner`, `nwh-customer`, `nwh-mobile`, `nwh-db-sync`).
 - Tự động giải phóng hoàn toàn các cổng mạng, tắt PostgreSQL container trên Docker và dọn dẹp lock files.
 

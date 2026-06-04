@@ -81,11 +81,17 @@ export default function TicketScreen() {
   }
 
   // Parse booking status
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const checkOut = new Date(booking.checkOutDate);
+  checkOut.setHours(0, 0, 0, 0);
+  const hasEnded = checkOut < today;
+
   const isPendingCancel = booking.cancellationReason && booking.cancellationReason.startsWith('PENDING_CANCEL');
   const isCancelled = booking.status === 'cancelled' || booking.status === 'canceled';
-  const isCheckedOut = booking.status === 'checked_out';
-  const isCheckedIn = booking.status === 'checked_in';
-  const isUnpaid = booking.paymentStatus === 'unpaid';
+  const isCheckedOut = booking.status === 'checked_out' || (!isCancelled && hasEnded);
+  const isCheckedIn = booking.status === 'checked_in' && !hasEnded;
+  const isUnpaid = booking.paymentStatus === 'unpaid' && !isCancelled && !hasEnded;
 
   let displayStatus = 'Đang xử lý';
   let badgeBg = '#FEF3C7';
@@ -117,7 +123,7 @@ export default function TicketScreen() {
     badgeText = '#10B981';
   }
 
-  const canCancel = !isCancelled && !isCheckedIn && !isCheckedOut && !isPendingCancel;
+  const canCancel = !isCancelled && !isCheckedOut && !isPendingCancel;
 
   return (
     <SafeAreaView style={styles.container}>

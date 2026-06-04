@@ -72,27 +72,6 @@ export class CompatController {
   }
 
   @Public()
-  @Post('customer/auth/register')
-  async registerCustomer(
-    @Body() body: Record<string, unknown>,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    await this.authService.register({
-      ...body,
-      userType: user_type_enum.customer,
-    } as never);
-    const result = await this.authService.login(
-      {
-        email: typeof body.email === 'string' ? body.email : '',
-        password: typeof body.password === 'string' ? body.password : '',
-      },
-      {},
-    );
-    this.setSessionCookies(response, result.accessToken, result.user.userType);
-    return result;
-  }
-
-  @Public()
   @Post('partner/auth/register')
   registerPartner(@Body() body: Record<string, unknown>) {
     return this.authService.register({
@@ -420,12 +399,6 @@ export class CompatController {
   }
 
   @Roles(Role.PARTNER)
-  @Get('partner/booking-report')
-  partnerBookingReport(@CurrentUser() user: AuthenticatedUser) {
-    return this.compatService.bookingReport(user);
-  }
-
-  @Roles(Role.PARTNER)
   @Post('partner/bookings/:id/:action')
   partnerBookingAction(
     @CurrentUser() user: AuthenticatedUser,
@@ -433,12 +406,6 @@ export class CompatController {
     @Param('action') action: string,
   ) {
     return this.compatService.partnerBookingAction(user, id, action);
-  }
-
-  @Roles(Role.CUSTOMER)
-  @Get('bookings/mine')
-  mine(@CurrentUser() user: AuthenticatedUser) {
-    return this.compatService.mine(user);
   }
 
   @Roles(Role.CUSTOMER)
@@ -454,12 +421,6 @@ export class CompatController {
     @Body() body: Record<string, unknown>,
   ) {
     return this.compatService.createBooking(user, body);
-  }
-
-  @Roles(Role.CUSTOMER)
-  @Post('mock-payment')
-  mockPayment(@CurrentUser() user: AuthenticatedUser, @Body() body: Record<string, unknown>) {
-    return this.compatService.mockPayment(user, body);
   }
 
   @Get('notifications')

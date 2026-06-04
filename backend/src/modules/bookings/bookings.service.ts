@@ -92,7 +92,11 @@ export class BookingsService {
 
     return this.prisma.$transaction(async (tx) => {
       // ── STEP 1: Lock rows & read inventory ────────────────────────────────
-      const rawRates = await tx.$queryRaw<RawDailyRateRow[]>`
+      // Try with the provided ratePlanId first; if not found, auto-resolve
+      // the first active rate plan for this roomType that has the required dates.
+      let resolvedRatePlanId = BigInt(dto.ratePlanId);
+
+      let rawRates = await tx.$queryRaw<RawDailyRateRow[]>`
         SELECT
           dr.id,
           dr.rate_plan_id,
@@ -104,15 +108,109 @@ export class BookingsService {
         WHERE
           rp.room_type_id  = ${roomTypeId}
           AND rp.is_active  = TRUE
-          AND dr.rate_plan_id = ${ratePlanId}
+          AND dr.rate_plan_id = ${resolvedRatePlanId}
           AND dr.date >= ${checkInDate}
           AND dr.date <  ${checkOutDate}
         ORDER BY dr.date ASC
         FOR UPDATE OF dr
       `;
 
+      // Fallback step 1: ratePlanId from client may be wrong (e.g. roomTypeId used instead)
+      // Auto-find the first active rate plan for this roomType that has all dates covered
       if (rawRates.length !== numNights) {
-        throw new BadRequestException('Phòng đã hết trong giai đoạn này');
+        const fallbackPlan = await tx.$queryRaw<Array<{ id: bigint }>>`
+          SELECT rp.id
+          FROM rate_plans rp
+          WHERE rp.room_type_id = ${roomTypeId}
+            AND rp.is_active = TRUE
+            AND (
+              SELECT COUNT(DISTINCT dr.date)
+              FROM daily_rates dr
+              WHERE dr.rate_plan_id = rp.id
+                AND dr.date >= ${checkInDate}
+                AND dr.date < ${checkOutDate}
+            ) = ${numNights}
+          ORDER BY rp.id ASC
+          LIMIT 1
+        `;
+
+        if (fallbackPlan.length > 0) {
+          resolvedRatePlanId = fallbackPlan[0].id;
+          rawRates = await tx.$queryRaw<RawDailyRateRow[]>`
+            SELECT
+              dr.id,
+              dr.rate_plan_id,
+              dr.date,
+              dr.price,
+              dr.available_qty
+            FROM daily_rates dr
+            WHERE
+              dr.rate_plan_id = ${resolvedRatePlanId}
+              AND dr.date >= ${checkInDate}
+              AND dr.date <  ${checkOutDate}
+            ORDER BY dr.date ASC
+            FOR UPDATE OF dr
+          `;
+        }
+      }
+
+      // Fallback step 2: Daily rates genuinely don't exist → auto-generate from basePrice
+      // This handles properties that have rate plans but no daily rates configured yet.
+      if (rawRates.length !== numNights) {
+        // Find any active rate plan for this room type
+        const anyRatePlan = await tx.ratePlan.findFirst({
+          where: { roomTypeId, isActive: true },
+          include: { roomType: { select: { basePrice: true, totalRooms: true } } },
+          orderBy: { id: 'asc' },
+        });
+
+        if (!anyRatePlan) {
+          throw new BadRequestException('Loại phòng này chưa có gói giá nào được cấu hình');
+        }
+
+        resolvedRatePlanId = anyRatePlan.id;
+        const basePrice = anyRatePlan.basePrice ?? anyRatePlan.roomType.basePrice;
+        const totalRooms = anyRatePlan.roomType.totalRooms || 10;
+
+        // Generate dates between checkIn and checkOut
+        const datesToCreate: Date[] = [];
+        const cursor = new Date(checkInDate);
+        while (cursor < checkOutDate) {
+          datesToCreate.push(new Date(cursor));
+          cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+
+        // Upsert daily rates for missing dates only
+        await tx.dailyRate.createMany({
+          data: datesToCreate.map((date) => ({
+            ratePlanId: resolvedRatePlanId,
+            date,
+            price: basePrice,
+            availableQty: totalRooms,
+          })),
+          skipDuplicates: true,
+        });
+
+        // Re-read the now-created rates with a FOR UPDATE lock
+        rawRates = await tx.$queryRaw<RawDailyRateRow[]>`
+          SELECT
+            dr.id,
+            dr.rate_plan_id,
+            dr.date,
+            dr.price,
+            dr.available_qty
+          FROM daily_rates dr
+          WHERE
+            dr.rate_plan_id = ${resolvedRatePlanId}
+            AND dr.date >= ${checkInDate}
+            AND dr.date <  ${checkOutDate}
+          ORDER BY dr.date ASC
+          FOR UPDATE OF dr
+        `;
+      }
+
+      if (rawRates.length !== numNights) {
+        throw new BadRequestException('Daily rates are missing for one or more nights');
       }
 
       const soldOutNight = rawRates.find((r) => Number(r.available_qty) < 1);
@@ -174,7 +272,7 @@ export class BookingsService {
           customerId,
           propertyId,
           roomTypeId,
-          ratePlanId,
+          ratePlanId: resolvedRatePlanId,
           checkInDate,
           checkOutDate,
           numNights,
@@ -213,8 +311,6 @@ export class BookingsService {
         include: {
           ratePlans: {
             where: { isActive: true },
-            orderBy: { id: 'asc' },
-            take: 1,
           },
         },
       });
@@ -223,12 +319,16 @@ export class BookingsService {
         throw new NotFoundException('Room type not found for this property');
       }
 
-      const ratePlan = roomType.ratePlans[0];
-      if (!ratePlan) {
+      if (roomType.ratePlans.length === 0) {
         throw new BadRequestException(
           'Room type does not have an active rate plan',
         );
       }
+
+      // Start with the client's requested ratePlanId, or fallback to the first active rate plan
+      let resolvedRatePlanId = roomType.ratePlans.some(rp => rp.id === BigInt(dto.ratePlanId))
+        ? BigInt(dto.ratePlanId)
+        : roomType.ratePlans[0].id;
 
       let assignableRooms = await tx.room.findMany({
         where: {
@@ -283,13 +383,75 @@ export class BookingsService {
         );
       }
 
-      const lockedRates = await this.lockDailyRates(
+      let lockedRates = await this.lockDailyRates(
         tx,
         roomTypeId,
-        ratePlan.id,
+        resolvedRatePlanId,
         checkInDate,
         checkOutDate,
       );
+
+      // Fallback step 1: If provided/first rate plan doesn't have all dates, find another active one
+      if (lockedRates.length !== numNights) {
+        const fallbackPlan = await tx.$queryRaw<Array<{ id: bigint }>>`
+          SELECT rp.id
+          FROM rate_plans rp
+          WHERE rp.room_type_id = ${roomTypeId}
+            AND rp.is_active = TRUE
+            AND (
+              SELECT COUNT(DISTINCT dr.date)
+              FROM daily_rates dr
+              WHERE dr.rate_plan_id = rp.id
+                AND dr.date >= ${checkInDate}
+                AND dr.date < ${checkOutDate}
+            ) = ${numNights}
+          ORDER BY rp.id ASC
+          LIMIT 1
+        `;
+
+        if (fallbackPlan.length > 0) {
+          resolvedRatePlanId = fallbackPlan[0].id;
+          lockedRates = await this.lockDailyRates(
+            tx,
+            roomTypeId,
+            resolvedRatePlanId,
+            checkInDate,
+            checkOutDate,
+          );
+        }
+      }
+
+      // Fallback step 2: If daily rates still missing, auto-generate them
+      if (lockedRates.length !== numNights) {
+        const ratePlanToGenerate = roomType.ratePlans.find(rp => rp.id === resolvedRatePlanId) || roomType.ratePlans[0];
+        const basePrice = ratePlanToGenerate.basePrice ?? roomType.basePrice;
+        const totalRooms = roomType.totalRooms || 10;
+
+        const datesToCreate: Date[] = [];
+        const cursor = new Date(checkInDate);
+        while (cursor < checkOutDate) {
+          datesToCreate.push(new Date(cursor));
+          cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+
+        await tx.dailyRate.createMany({
+          data: datesToCreate.map((date) => ({
+            ratePlanId: resolvedRatePlanId,
+            date,
+            price: basePrice,
+            availableQty: totalRooms,
+          })),
+          skipDuplicates: true,
+        });
+
+        lockedRates = await this.lockDailyRates(
+          tx,
+          roomTypeId,
+          resolvedRatePlanId,
+          checkInDate,
+          checkOutDate,
+        );
+      }
 
       this.assertCompleteAndAvailableInventory(
         lockedRates,
@@ -311,66 +473,66 @@ export class BookingsService {
       );
 
       const subtotalAmount = lockedRates.reduce(
-      (sum, rate) => sum.plus(rate.price.times(dto.roomsNeeded)),
-      new Prisma.Decimal(0),
-    );
-    const taxAmount = subtotalAmount.times(TAX_RATE);
+        (sum, rate) => sum.plus(rate.price.times(dto.roomsNeeded)),
+        new Prisma.Decimal(0),
+      );
+      const taxAmount = subtotalAmount.times(TAX_RATE);
 
-    let discountAmount = new Prisma.Decimal(0);
-    if (dto.voucherId) {
-      const voucher = await tx.voucher.findUnique({
-        where: { id: BigInt(dto.voucherId), isActive: true },
-        include: { promotion: true },
-      });
-      if (voucher) {
-        const now = new Date();
-        if (now >= voucher.promotion.startDate && now <= voucher.promotion.endDate) {
-          if (!voucher.promotion.maxUses || voucher.promotion.totalUsed < voucher.promotion.maxUses) {
-            if (subtotalAmount.greaterThanOrEqualTo(voucher.promotion.minOrderAmount)) {
-              if (voucher.promotion.discountType === 'percent') {
-                let discount = subtotalAmount.times(voucher.promotion.discountValue).div(100);
-                if (voucher.promotion.maxDiscount && discount.greaterThan(voucher.promotion.maxDiscount)) {
-                  discount = new Prisma.Decimal(voucher.promotion.maxDiscount);
+      let discountAmount = new Prisma.Decimal(0);
+      if (dto.voucherId) {
+        const voucher = await tx.voucher.findUnique({
+          where: { id: BigInt(dto.voucherId), isActive: true },
+          include: { promotion: true },
+        });
+        if (voucher) {
+          const now = new Date();
+          if (now >= voucher.promotion.startDate && now <= voucher.promotion.endDate) {
+            if (!voucher.promotion.maxUses || voucher.promotion.totalUsed < voucher.promotion.maxUses) {
+              if (subtotalAmount.greaterThanOrEqualTo(voucher.promotion.minOrderAmount)) {
+                if (voucher.promotion.discountType === 'percent') {
+                  let discount = subtotalAmount.times(voucher.promotion.discountValue).div(100);
+                  if (voucher.promotion.maxDiscount && discount.greaterThan(voucher.promotion.maxDiscount)) {
+                    discount = new Prisma.Decimal(voucher.promotion.maxDiscount);
+                  }
+                  discountAmount = discount;
+                } else {
+                  discountAmount = new Prisma.Decimal(voucher.promotion.discountValue);
                 }
-                discountAmount = discount;
-              } else {
-                discountAmount = new Prisma.Decimal(voucher.promotion.discountValue);
+                
+                await tx.promotion.update({
+                  where: { id: voucher.promotion.id },
+                  data: { totalUsed: { increment: 1 } },
+                });
               }
-              
-              await tx.promotion.update({
-                where: { id: voucher.promotion.id },
-                data: { totalUsed: { increment: 1 } },
-              });
             }
           }
         }
       }
-    }
 
-    const totalAmount = Prisma.Decimal.max(0, subtotalAmount.plus(taxAmount).minus(discountAmount));
+      const totalAmount = Prisma.Decimal.max(0, subtotalAmount.plus(taxAmount).minus(discountAmount));
 
-    const ratePlanIdForCreate = ratePlan.id;
-    const booking = await tx.booking.create({
-      data: {
-        bookingCode: this.generateBookingCode(),
-        customerId,
-        propertyId,
-        roomTypeId,
-        ratePlanId: ratePlanIdForCreate,
-        checkInDate,
-        checkOutDate,
-        numNights,
-        numAdults: dto.numAdults,
-        numChildren: dto.numChildren,
-        subtotalAmount,
-        discountAmount,
-        taxAmount,
-        totalAmount,
-        partnerPayoutAmount: Prisma.Decimal.max(0, subtotalAmount.minus(discountAmount)),
-        status: booking_status_enum.pending,
-        voucherId: dto.voucherId ? BigInt(dto.voucherId) : undefined,
-      },
-    });
+      const booking = await tx.booking.create({
+        data: {
+          bookingCode: this.generateBookingCode(),
+          customerId,
+          propertyId,
+          roomTypeId,
+          ratePlanId: resolvedRatePlanId,
+          checkInDate,
+          checkOutDate,
+          numNights,
+          numAdults: dto.numAdults,
+          numChildren: dto.numChildren,
+          subtotalAmount,
+          discountAmount,
+          taxAmount,
+          totalAmount,
+          platformFeeAmount: Prisma.Decimal.max(0, totalAmount.times(0.1)),
+          partnerPayoutAmount: Prisma.Decimal.max(0, totalAmount.times(0.9)),
+          status: booking_status_enum.pending,
+          voucherId: dto.voucherId ? BigInt(dto.voucherId) : undefined,
+        },
+      });
 
       const averageRoomPrice = subtotalAmount
         .div(dto.roomsNeeded)
@@ -379,7 +541,7 @@ export class BookingsService {
         tx,
         booking.id,
         assignableRooms.map((room) => room.id),
-        ratePlan.id,
+        resolvedRatePlanId,
         averageRoomPrice,
       );
 
@@ -480,6 +642,7 @@ export class BookingsService {
       throw new NotFoundException('Booking not found');
     }
 
+    // Cannot cancel if already cancelled or checked out
     if (
       booking.status === booking_status_enum.cancelled ||
       booking.status === booking_status_enum.checked_out
@@ -487,10 +650,13 @@ export class BookingsService {
       throw new BadRequestException('Booking cannot be cancelled');
     }
 
+    // If cancelled after check-in, no refund to customer (money stays with admin/partner)
+    const isPostCheckInCancellation = booking.status === booking_status_enum.checked_in;
     const refund = this.calculateRefund(
       booking.totalAmount,
       booking.checkInDate,
       booking.property.policy,
+      isPostCheckInCancellation,
     );
 
     await this.prisma.$transaction(async (tx) => {
@@ -509,6 +675,7 @@ export class BookingsService {
           status: booking_status_enum.cancelled,
           cancelledById: customerId,
           cancelledAt: new Date(),
+          paymentStatus: refund.refundAmount.greaterThan(0) ? 'refunded' : booking.paymentStatus,
         },
       });
 
@@ -516,7 +683,11 @@ export class BookingsService {
         throw new BadRequestException('Booking cannot be cancelled');
       }
 
-      await this.restoreAvailability(tx, booking);
+      // Only restore availability if not already checked in
+      // (after check-in, rooms are already occupied, no availability to restore)
+      if (booking.status !== booking_status_enum.checked_in) {
+        await this.restoreAvailability(tx, booking);
+      }
     });
 
     return {
@@ -547,10 +718,16 @@ export class BookingsService {
 
     if (
       booking.status === booking_status_enum.cancelled ||
-      booking.status === booking_status_enum.checked_out ||
-      booking.status === booking_status_enum.checked_in
+      booking.status === booking_status_enum.checked_out
     ) {
       throw new BadRequestException('Booking cannot be cancelled at this stage');
+    }
+
+    // Direct cancellation for unpaid bookings or post-check-in cancellations
+    // (post-check-in cancellations don't require admin approval - money already kept)
+    if (booking.paymentStatus === 'unpaid' || booking.status === booking_status_enum.checked_in) {
+      await this.cancel(user, bookingIdParam);
+      return { ok: true, status: 'cancelled' };
     }
 
     await this.prisma.booking.update({
@@ -750,7 +927,18 @@ export class BookingsService {
       freeCancelHours: number | null;
       cancelPenaltyPercent: Prisma.Decimal;
     } | null,
+    isPostCheckInCancellation: boolean = false,
   ) {
+    // If cancelled after check-in, no refund to customer (100% penalty)
+    if (isPostCheckInCancellation) {
+      return {
+        totalAmount,
+        penaltyPercent: new Prisma.Decimal(100),
+        penaltyAmount: totalAmount,
+        refundAmount: new Prisma.Decimal(0),
+      };
+    }
+
     const penaltyPercent = this.calculatePenaltyPercent(checkInDate, policy);
     const penaltyAmount = totalAmount.times(penaltyPercent).div(100);
     const refundAmount = totalAmount.minus(penaltyAmount);

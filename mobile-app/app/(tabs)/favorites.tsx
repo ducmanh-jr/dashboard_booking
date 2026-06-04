@@ -15,10 +15,33 @@ import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme
 import { PropertyCard } from '../../components/PropertyCard';
 import { useRouter } from 'expo-router';
 import { useFavoriteStore } from '../../store/useFavoriteStore';
+import { useAuthStore } from '../../store/useAuthStore';
 
 export default function FavoritesScreen() {
   const router = useRouter();
-  const { favorites, toggleFavorite } = useFavoriteStore();
+  const { favorites, toggleFavorite, fetchFavorites } = useFavoriteStore();
+  const { hasToken, isTokenReady } = useAuthStore();
+
+  React.useEffect(() => {
+    if (isTokenReady && hasToken) {
+      fetchFavorites();
+    }
+  }, [isTokenReady, hasToken]);
+
+  if (!hasToken) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.title}>Yêu thích của bạn</Text>
+        <View style={styles.emptyContainer}>
+          <Ionicons name="person-outline" size={64} color={Colors.light.border} />
+          <Text style={styles.emptyText}>Đăng nhập để xem danh sách yêu thích của bạn.</Text>
+          <TouchableOpacity style={styles.exploreButton} onPress={() => router.push('/login' as any)}>
+            <Text style={styles.exploreButtonText}>Đăng nhập</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>

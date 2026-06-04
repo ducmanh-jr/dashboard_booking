@@ -39,8 +39,9 @@ export class VouchersService {
       }
     }
 
-    const now = new Date();
-    if (now < voucher.promotion.startDate || now > voucher.promotion.endDate) {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    if (today < voucher.promotion.startDate || today > voucher.promotion.endDate) {
       throw new BadRequestException('Voucher is expired or not yet active');
     }
 
@@ -59,7 +60,8 @@ export class VouchersService {
   }
 
   async getActiveVouchers(propertyId?: string) {
-    const now = new Date();
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
     
     let partnerId: bigint | null = null;
     if (propertyId && propertyId !== 'undefined' && propertyId !== 'null') {
@@ -87,8 +89,8 @@ export class VouchersService {
         isActive: true,
         promotion: {
           isActive: true,
-          startDate: { lte: now },
-          endDate: { gte: now },
+          startDate: { lte: today },
+          endDate: { gte: today },
           OR: partnerId
             ? [
                 { partnerId: partnerId },

@@ -71,9 +71,15 @@ export default function HomeScreen() {
   const [showFlightModal, setShowFlightModal] = useState(false);
   const [showTransportModal, setShowTransportModal] = useState(false);
   const { location, checkInDate, checkOutDate, guests } = useSearchStore();
-  const { favorites, toggleFavorite } = useFavoriteStore();
+  const { favorites, toggleFavorite, fetchFavorites } = useFavoriteStore();
 
   const hasToken = useAuthStore((state) => state.hasToken);
+
+  React.useEffect(() => {
+    if (hasToken) {
+      fetchFavorites();
+    }
+  }, [hasToken]);
   const authUser = useAuthStore((state) => state.user);
 
   const { data: userProfile } = useQuery({
@@ -108,7 +114,7 @@ export default function HomeScreen() {
   const { data, isPending, isError, refetch, isRefetching } = useQuery({
     queryKey: ['featured_properties'],
     queryFn: async () => {
-      const response = await apiClient.get('/properties/search', {
+      const response: any = await apiClient.get('/properties/search', {
         params: { limit: 5 },
       });
       return response.items as any[];

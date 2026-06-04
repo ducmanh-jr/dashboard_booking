@@ -1064,33 +1064,72 @@ export class CompatService {
 
   async bookingReport(user?: AuthenticatedUser) {
     const partner = user ? await this.partnerProfile(user) : null;
+    // When called without user (admin context), do NOT filter by partnerId — return all properties
+    const whereClause = partner ? { partnerId: partner.id } : {};
     const properties = await this.prisma.property.findMany({
-      where: {
-        partnerId: partner?.id,
-      },
+      where: whereClause,
       include: {
         partner: { include: { user: true } },
-        bookings: { 
-          include: { customer: true, roomType: true }, 
-          orderBy: { createdAt: 'desc' } 
+        bookings: {
+          include: { customer: true, roomType: true },
+          orderBy: { createdAt: 'desc' }
         },
       },
       orderBy: { createdAt: 'desc' },
     });
     return {
-      hotels: properties.map((property) => ({
-        propertyId: property.id,
-        propertyName: property.name,
-        city: property.city,
-        address: property.address,
-        partnerHotelName: property.partner.businessName,
-        partnerEmail: property.partner.user.email,
-        propertyStatus: property.status,
-        isArchived: this.isArchivedProperty(property),
-        archivedLabel: this.isArchivedProperty(property) ? 'Khách sạn đã ngừng hoạt động' : null,
-        isActiveHotel: property.status === 'active' && !property.deletedAt,
-        bookings: property.bookings.map((booking) => this.mapBooking(booking)),
-      })),
+      hotels: properties.map((property) => {
+        const bookingsList = property.bookings;
+        const mappedBookings = bookingsList.map((booking) => this.mapBooking(booking));
+
+        let earnedRevenue = 0;
+        let pendingRevenue = 0;
+        let earnedCommission = 0;
+        let pendingCommission = 0;
+        let earnedPartnerPayout = 0;
+        let pendingPartnerPayout = 0;
+
+        for (const booking of bookingsList) {
+          const total = Number(booking.totalAmount);
+          const fee = Number(booking.platformFeeAmount);
+          const payout = Number(booking.partnerPayoutAmount);
+          if (booking.status !== 'cancelled') {
+            if (booking.paymentStatus === 'paid') {
+              earnedRevenue += total;
+              earnedCommission += fee;
+              earnedPartnerPayout += payout;
+            } else {
+              pendingRevenue += total;
+              pendingCommission += fee;
+              pendingPartnerPayout += payout;
+            }
+          }
+        }
+
+        const currentStayCount = mappedBookings.filter((b) => b.isCurrentStay).length;
+
+        return {
+          propertyId: Number(property.id),
+          propertyName: property.name,
+          city: property.city,
+          address: property.address,
+          partnerHotelName: property.partner?.businessName ?? property.name,
+          partnerEmail: property.partner?.user?.email ?? null,
+          propertyStatus: property.status,
+          isArchived: this.isArchivedProperty(property),
+          archivedLabel: this.isArchivedProperty(property) ? 'Khách sạn đã ngừng hoạt động' : null,
+          isActiveHotel: property.status === 'active' && !property.deletedAt,
+          currentStayCount,
+          totalBookings: bookingsList.length,
+          earnedRevenue,
+          pendingRevenue,
+          earnedCommission,
+          pendingCommission,
+          earnedPartnerPayout,
+          pendingPartnerPayout,
+          bookings: mappedBookings,
+        };
+      }),
     };
   }
 
@@ -1143,47 +1182,110 @@ export class CompatService {
       throw new BadRequestException('Booking da bi huy hoac check-out');
     }
 
+    // Khách đang ở (checked_in) => KHÔNG hoàn tiền, tiền tính vào doanh thu
+    // Để hệ thống doanh thu tính đúng, đổi status sang checked_out (coi như đã ở xong)
+    // thay vì cancelled (cancelled bị bỏ qua khỏi bảng doanh thu)
+    const isCheckedIn = booking.status === booking_status_enum.checked_in;
+    const wasPaid = booking.paymentStatus === payment_status_enum.paid;
+
     await this.prisma.$transaction(async (tx) => {
-      await tx.booking.update({
-        where: { id: bookingId },
-        data: {
-          status: booking_status_enum.cancelled,
-          cancelledAt: new Date(),
-          cancellationReason: booking.cancellationReason?.startsWith('PENDING_CANCEL')
-            ? `Yêu cầu hủy được duyệt: ${booking.cancellationReason.replace('PENDING_CANCEL:', '').trim()}`
-            : 'Admin huy don hang',
-        },
-      });
+      const baseReason = booking.cancellationReason?.startsWith('PENDING_CANCEL')
+        ? `Yêu cầu hủy được duyệt: ${booking.cancellationReason.replace('PENDING_CANCEL:', '').trim()}`
+        : 'Admin huy don hang';
 
-      // Restore availability
-      const inventoryRows = await tx.$queryRaw<Array<{ ratePlanId: bigint; roomsCount: bigint }>>`
-        SELECT
-          rate_plan_id AS "ratePlanId",
-          COUNT(*)::bigint AS "roomsCount"
-        FROM booking_rooms
-        WHERE booking_id = ${booking.id}
-        GROUP BY rate_plan_id
-      `;
-
-      for (const inventoryRow of inventoryRows) {
-        await tx.dailyRate.updateMany({
-          where: {
-            ratePlanId: inventoryRow.ratePlanId,
-            date: {
-              gte: booking.checkInDate,
-              lt: booking.checkOutDate,
-            },
-          },
+      if (isCheckedIn) {
+        // Khách đang ở → không hoàn tiền → đánh dấu checked_out sớm để doanh thu được ghi nhận
+        await tx.booking.update({
+          where: { id: bookingId },
           data: {
-            availableQty: {
-              increment: Number(inventoryRow.roomsCount),
-            },
+            status: booking_status_enum.checked_out,
+            cancellationReason: `${baseReason} (Trả phòng sớm - không hoàn tiền)`,
           },
         });
+
+        // Hoàn lại phòng từ ngày hôm nay trở đi (các đêm còn lại chưa dùng)
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        const restoreFrom = today > booking.checkInDate ? today : booking.checkInDate;
+
+        if (restoreFrom < booking.checkOutDate) {
+          const inventoryRows = await tx.$queryRaw<Array<{ ratePlanId: bigint; roomsCount: bigint }>>`
+            SELECT
+              rate_plan_id AS "ratePlanId",
+              COUNT(*)::bigint AS "roomsCount"
+            FROM booking_rooms
+            WHERE booking_id = ${booking.id}
+            GROUP BY rate_plan_id
+          `;
+
+          for (const inventoryRow of inventoryRows) {
+            await tx.dailyRate.updateMany({
+              where: {
+                ratePlanId: inventoryRow.ratePlanId,
+                date: {
+                  gte: restoreFrom,
+                  lt: booking.checkOutDate,
+                },
+              },
+              data: {
+                availableQty: {
+                  increment: Number(inventoryRow.roomsCount),
+                },
+              },
+            });
+          }
+        }
+      } else {
+        // Khách chưa check-in → hủy bình thường
+        await tx.booking.update({
+          where: { id: bookingId },
+          data: {
+            status: booking_status_enum.cancelled,
+            cancelledAt: new Date(),
+            cancellationReason: baseReason,
+            // Nếu đã thanh toán online → đổi sang refunded
+            ...(wasPaid ? { paymentStatus: payment_status_enum.refunded } : {}),
+          },
+        });
+
+        // Hoàn toàn bộ phòng (chưa ở ngày nào)
+        const inventoryRows = await tx.$queryRaw<Array<{ ratePlanId: bigint; roomsCount: bigint }>>`
+          SELECT
+            rate_plan_id AS "ratePlanId",
+            COUNT(*)::bigint AS "roomsCount"
+          FROM booking_rooms
+          WHERE booking_id = ${booking.id}
+          GROUP BY rate_plan_id
+        `;
+
+        for (const inventoryRow of inventoryRows) {
+          await tx.dailyRate.updateMany({
+            where: {
+              ratePlanId: inventoryRow.ratePlanId,
+              date: {
+                gte: booking.checkInDate,
+                lt: booking.checkOutDate,
+              },
+            },
+            data: {
+              availableQty: {
+                increment: Number(inventoryRow.roomsCount),
+              },
+            },
+          });
+        }
       }
     });
 
-    return { ok: true };
+    return {
+      ok: true,
+      refunded: !isCheckedIn && wasPaid,
+      note: isCheckedIn
+        ? 'Khách đã check-in, trả phòng sớm - tiền tính vào doanh thu admin & đối tác, không hoàn tiền'
+        : wasPaid
+          ? 'Đã đánh dấu hoàn tiền'
+          : 'Đơn chưa thanh toán, không cần hoàn tiền',
+    };
   }
 
   async adminMarkBookingPaid(id: string) {

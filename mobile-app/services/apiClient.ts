@@ -75,7 +75,7 @@ apiClient.interceptors.response.use(
         ? res.data.message[0]
         : res.data.message || "Lỗi kết nối máy chủ";
 
-      console.error("[API Error]:", errorMessage);
+      console.warn("[API Error]:", errorMessage);
       return Promise.reject(new Error(errorMessage));
     }
     return Promise.reject(error);
